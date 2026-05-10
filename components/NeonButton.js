@@ -39,7 +39,7 @@ export default function NeonButton({ title, onPress, style, textStyle, outline =
   return (
     <Animated.View style={[styles.container, style, animatedStyle]}>
       {!outline && (
-        <Animated.View style={[styles.glow, glowStyle]} />
+        <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
       )}
       <TouchableOpacity 
         style={[
