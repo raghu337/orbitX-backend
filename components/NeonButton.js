@@ -4,7 +4,6 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, wit
 import { Theme } from '../styles/theme';
 
 export default function NeonButton({ title, onPress, style, textStyle, outline = false }) {
-  const scale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.5);
 
   React.useEffect(() => {
@@ -20,18 +19,6 @@ export default function NeonButton({ title, onPress, style, textStyle, outline =
     }
   }, [outline]);
 
-  const handlePressIn = () => {
-    scale.value = withTiming(0.95, { duration: 100 });
-  };
-
-  const handlePressOut = () => {
-    scale.value = withTiming(1, { duration: 100 });
-  };
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
   const glowStyle = useAnimatedStyle(() => ({
     opacity: glowOpacity.value,
   }));
@@ -41,16 +28,14 @@ export default function NeonButton({ title, onPress, style, textStyle, outline =
       {!outline && (
         <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
       )}
-      <Animated.View style={[animatedStyle, { width: '100%' }]}>
+      <Animated.View style={[{ width: '100%' }]}>
         <TouchableOpacity 
           style={[
             styles.button, 
             outline ? styles.outlineButton : styles.primaryButton,
           ]} 
           onPress={onPress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
           <Text style={[
             styles.text,
