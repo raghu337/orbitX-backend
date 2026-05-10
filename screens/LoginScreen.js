@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Theme } from '../styles/theme';
 import SpaceBackground from '../components/SpaceBackground';
 import GlassCard from '../components/GlassCard';
@@ -10,10 +10,15 @@ import FloatingElement from '../components/FloatingElement';
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = () => {
-    // Navigate to Home Dashboard after login
-    navigation.replace('HomeDashboard');
+    // Mock login logic
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      navigation.navigate('HomeDashboard');
+    }, 1000);
   };
 
   return (
@@ -47,10 +52,14 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
-          <NeonButton 
-            title="LAUNCH" 
-            onPress={handleLogin}
-          />
+          {isLoading ? (
+            <ActivityIndicator size="large" color={Theme.colors.primary} style={{ marginVertical: Theme.spacing.md }} />
+          ) : (
+            <NeonButton 
+              title="LAUNCH" 
+              onPress={handleLogin}
+            />
+          )}
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>New to OrbitX? </Text>

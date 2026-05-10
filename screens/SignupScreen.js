@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Theme } from '../styles/theme';
 import SpaceBackground from '../components/SpaceBackground';
 import GlassCard from '../components/GlassCard';
@@ -12,10 +12,15 @@ export default function SignupScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSignup = () => {
-    // Navigate to Home Dashboard after signup
-    navigation.replace('HomeDashboard');
+    // Mock signup logic
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      navigation.navigate('HomeDashboard');
+    }, 1000);
   };
 
   return (
@@ -62,10 +67,14 @@ export default function SignupScreen({ navigation }) {
             />
 
             <View style={{ marginTop: Theme.spacing.md }}>
-              <NeonButton 
-                title="CREATE ACCOUNT" 
-                onPress={handleSignup}
-              />
+              {isLoading ? (
+                <ActivityIndicator size="large" color={Theme.colors.primary} style={{ paddingVertical: Theme.spacing.md }} />
+              ) : (
+                <NeonButton 
+                  title="CREATE ACCOUNT" 
+                  onPress={handleSignup}
+                />
+              )}
             </View>
 
             <View style={styles.loginContainer}>

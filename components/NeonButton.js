@@ -37,29 +37,31 @@ export default function NeonButton({ title, onPress, style, textStyle, outline =
   }));
 
   return (
-    <Animated.View style={[styles.container, style, animatedStyle]}>
+    <View style={[styles.container, style]}>
       {!outline && (
         <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
       )}
-      <TouchableOpacity 
-        style={[
-          styles.button, 
-          outline ? styles.outlineButton : styles.primaryButton,
-        ]} 
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.8}
-      >
-        <Text style={[
-          styles.text,
-          outline ? styles.outlineText : styles.primaryText,
-          textStyle
-        ]}>
-          {title}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
+      <Animated.View style={[animatedStyle, { width: '100%' }]}>
+        <TouchableOpacity 
+          style={[
+            styles.button, 
+            outline ? styles.outlineButton : styles.primaryButton,
+          ]} 
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          activeOpacity={0.8}
+        >
+          <Text style={[
+            styles.text,
+            outline ? styles.outlineText : styles.primaryText,
+            textStyle
+          ]}>
+            {title}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
