@@ -1,13 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    Vibration,
-    View
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View,
 } from 'react-native';
 import BackgroundGradient from '../../components/BackgroundGradient';
 import GlassCard from '../../components/GlassCard';
@@ -15,6 +15,7 @@ import NeonButton from '../../components/NeonButton';
 import AnswerOption from '../../components/quiz/AnswerOption';
 import ProgressTracker from '../../components/quiz/ProgressTracker';
 import { prepareQuiz } from '../../data/quizData';
+import { recordQuizResult } from '../../services/quizStorage';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
 
 const { width, height } = Dimensions.get('window');
@@ -26,12 +27,13 @@ const QuestCategoryFallback = {
   id: 'UNKNOWN',
   missionType: 'UNKNOWN',
   difficulty: 'NORMAL',
+  xp: 1000,
 };
 
 const QuizPlayScreen = ({ route, navigation }) => {
   const category = route.params?.category || QuestCategoryFallback;
-  
-  // State
+  const mode = route.params?.mode || 'classic';
+
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
@@ -39,69 +41,76 @@ const QuizPlayScreen = ({ route, navigation }) => {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(30);
   const [fuel, setFuel] = useState(3);
-  const [gameState, setGameState] = useState('BRIEFING'); // BRIEFING, COUNTDOWN, PLAYING, FINISHED
+  const [gameState, setGameState] = useState('BRIEFING');
   const [countdown, setCountdown] = useState(3);
-  const [submitting, setSubmitting] = useState(false);
+  const [currentCorrectStreak, setCurrentCorrectStreak] = useState(0);
+  const [bestCorrectStreak, setBestCorrectStreak] = useState(0);
+  const [streakBonus, setStreakBonus] = useState(0);
+  const [flashType, setFlashType] = useState(null);
 
-  // Animation values
   const fuelScale = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
-  const [flashType, setFlashType] = useState(null);
 
-  // Initialize Quiz Dataset
+  const currentQuestion = questions[currentQuestionIndex];
+  const totalQuestions = questions.length;
+
   useEffect(() => {
-    // Launching quiz
-    
-    // Load category-specific dataset with randomization
-    const missionQuestions = prepareQuiz(route.params?.category?.title || '');
-    
-    if (!(missionQuestions?.length > 0)) {
-      // Missing questions
+    const missionQuestions = prepareQuiz(category.title);
+
+    if (!missionQuestions?.length) {
       navigation.goBack();
       return;
     }
 
     setQuestions(missionQuestions);
-    
-    // Animate briefing entry
+    setCurrentQuestionIndex(0);
+    setSelectedOption(null);
+    setIsAnswered(false);
+    setScore(0);
+    setTimeLeft(30);
+    setFuel(3);
+    setCurrentCorrectStreak(0);
+    setBestCorrectStreak(0);
+    setStreakBonus(0);
+    setGameState('BRIEFING');
+    setCountdown(3);
+
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 800,
+      duration: 700,
       useNativeDriver: true,
     }).start();
-  }, [route.params?.category?.title]);
+  }, [category.title]);
 
-  const currentQuestion = questions?.[currentQuestionIndex];
-
-  // Countdown cycle
   useEffect(() => {
-    if (gameState === 'COUNTDOWN') {
-      if (countdown > 0) {
-        const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-        return () => clearTimeout(timer);
-      } else {
-        setGameState('PLAYING');
-      }
+    if (gameState !== 'COUNTDOWN') return;
+    if (countdown <= 0) {
+      setGameState('PLAYING');
+      return;
     }
+
+    const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
   }, [countdown, gameState]);
 
-  // Main game timer
   useEffect(() => {
-    if (gameState === 'PLAYING' && timeLeft > 0 && !isAnswered) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (gameState === 'PLAYING' && timeLeft === 0 && !isAnswered) {
-      handleAnswer(null); // Time out - treat as wrong
+    if (gameState !== 'PLAYING' || isAnswered) return;
+    if (timeLeft <= 0) {
+      handleAnswer(null);
+      return;
     }
-  }, [timeLeft, isAnswered, gameState]);
+
+    const timer = setTimeout(() => setTimeLeft((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [gameState, timeLeft, isAnswered]);
 
   const triggerShake = () => {
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 12, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -12, duration: 40, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 12, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 40, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: 0, duration: 40, useNativeDriver: true }),
     ]).start();
   };
@@ -109,57 +118,83 @@ const QuizPlayScreen = ({ route, navigation }) => {
   const triggerFlash = (type) => {
     setFlashType(type);
     Animated.sequence([
-      Animated.timing(flashOpacity, { toValue: 0.3, duration: 100, useNativeDriver: true }),
-      Animated.timing(flashOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0.3, duration: 80, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start();
+  };
+
+  const completeMission = async (failed = false) => {
+    const accuracy = totalQuestions ? Math.round((score / totalQuestions) * 100) : 0;
+    const baseXp = score * 10;
+    const perfectBonus = !failed && score === totalQuestions && totalQuestions > 0 ? 100 : 0;
+    const dailyBonus = !failed && mode === 'daily' ? 50 : 0;
+    const xpEarned = baseXp + streakBonus + perfectBonus + dailyBonus;
+
+    await recordQuizResult({
+      category,
+      score,
+      total: totalQuestions,
+      xpEarned,
+      accuracy,
+      isDaily: mode === 'daily' && !failed,
+      currentStreak: bestCorrectStreak,
+      bestStreak: bestCorrectStreak,
+    });
+
+    navigation.replace('QuizResult', {
+      score,
+      total: totalQuestions,
+      category,
+      failed,
+      xpEarned,
+      accuracy,
+    });
   };
 
   const handleAnswer = (option) => {
     if (isAnswered || !currentQuestion) return;
-    
+
+    const isCorrect = option === currentQuestion.correctAnswer;
     setSelectedOption(option);
     setIsAnswered(true);
-    
-    const isCorrect = option === currentQuestion.correctAnswer;
+
     if (isCorrect) {
-      setScore(score + 1);
+      setScore((prev) => prev + 1);
+      setCurrentCorrectStreak((prevStreak) => {
+        const nextStreak = prevStreak + 1;
+        setBestCorrectStreak((prevBest) => Math.max(prevBest, nextStreak));
+        if (prevStreak > 0) {
+          setStreakBonus((prevBonus) => prevBonus + 5);
+        }
+        return nextStreak;
+      });
       triggerFlash('success');
     } else {
-      setFuel(prev => Math.max(0, prev - 1));
+      setCurrentCorrectStreak(0);
+      setFuel((prev) => Math.max(0, prev - 1));
       triggerShake();
       triggerFlash('error');
       Vibration.vibrate(200);
-      
       Animated.sequence([
-        Animated.timing(fuelScale, { toValue: 1.6, duration: 150, useNativeDriver: true }),
-        Animated.timing(fuelScale, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(fuelScale, { toValue: 1.6, duration: 130, useNativeDriver: true }),
+        Animated.timing(fuelScale, { toValue: 1, duration: 130, useNativeDriver: true }),
       ]).start();
     }
   };
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (fuel === 0) {
-      navigation.replace('QuizResult', { 
-        score, 
-        total: questions.length,
-        category,
-        failed: true
-      });
+      completeMission(true);
       return;
     }
 
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    if (currentQuestionIndex < totalQuestions - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedOption(null);
       setIsAnswered(false);
       setTimeLeft(30);
     } else {
-      setSubmitting(false);
-      navigation.replace('QuizResult', {
-        score,
-        total: questions.length,
-        category
-      });
+      completeMission(false);
     }
   };
 
@@ -167,18 +202,17 @@ const QuizPlayScreen = ({ route, navigation }) => {
     setGameState('COUNTDOWN');
   };
 
-  // 1. Mission Briefing Phase
   if (gameState === 'BRIEFING') {
     return (
       <BackgroundGradient>
-        <Animated.View style={[styles.center, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.center, { opacity: fadeAnim }]}> 
           <View style={styles.briefingHeader}>
-            <View style={[styles.iconGlowContainer, { backgroundColor: `${category.color}20` }]}>
+            <View style={[styles.iconGlowContainer, { backgroundColor: `${category.color}20` }]}> 
               <MaterialCommunityIcons name={category.icon} size={60} color={category.color} />
             </View>
             <Text style={[styles.briefingTitle, { color: category.color }]}>{category.title.toUpperCase()}</Text>
           </View>
-          
+
           <GlassCard style={styles.briefingCard}>
             <Text style={styles.missionBriefTitle}>MISSION_IDENTIFIER: {category.id}</Text>
             <View style={styles.briefingDivider} />
@@ -192,7 +226,7 @@ const QuizPlayScreen = ({ route, navigation }) => {
             </View>
             <View style={styles.briefInfoRow}>
               <Text style={styles.briefLabel}>COORDINATES:</Text>
-              <Text style={styles.briefValue}>{questions.length} Points</Text>
+              <Text style={styles.briefValue}>{totalQuestions} Points</Text>
             </View>
             <View style={styles.briefingDivider} />
             <Text style={styles.briefingInstruction}>
@@ -200,12 +234,12 @@ const QuizPlayScreen = ({ route, navigation }) => {
             </Text>
           </GlassCard>
 
-          <NeonButton 
-            title="CONFIRM & LAUNCH" 
+          <NeonButton
+            title="CONFIRM & LAUNCH"
             onPress={startCountdown}
             style={[styles.launchButton, { backgroundColor: category.color }]}
           />
-          
+
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.abortButton}>
             <Text style={styles.abortText}>ABORT MISSION</Text>
           </TouchableOpacity>
@@ -214,13 +248,12 @@ const QuizPlayScreen = ({ route, navigation }) => {
     );
   }
 
-  // 2. Launch Countdown Phase
   if (gameState === 'COUNTDOWN') {
     return (
       <BackgroundGradient>
         <View style={styles.center}>
           <Text style={styles.missionBrief}>MISSION_START_IN</Text>
-          <View style={[styles.countdownCircle, { borderColor: category.color }]}>
+          <View style={[styles.countdownCircle, { borderColor: category.color }]}> 
             <Text style={[styles.countdownText, { color: category.color }]}>{countdown === 0 ? 'GO!' : countdown}</Text>
             <View style={[styles.countdownGlow, { backgroundColor: category.color }]} />
           </View>
@@ -230,38 +263,37 @@ const QuizPlayScreen = ({ route, navigation }) => {
     );
   }
 
-  if (!currentQuestion) return null;
+  if (!currentQuestion) {
+    return null;
+  }
 
-  // 3. Active Mission Phase (Gameplay)
   return (
     <BackgroundGradient>
       <View style={styles.container}>
-        {/* Flash Overlay */}
-        <Animated.View 
+        <Animated.View
           style={[
-            StyleSheet.absoluteFillObject, 
-            { 
+            StyleSheet.absoluteFillObject,
+            {
               backgroundColor: flashType === 'success' ? COLORS.success : COLORS.error,
               opacity: flashOpacity,
               zIndex: 100,
-            }
-          ]} 
+            },
+          ]}
           pointerEvents="none"
         />
-        
-        {/* Background Visual Element */}
-        <MaterialCommunityIcons 
-          name={category.icon} 
-          size={width * 0.9} 
-          color={`${category.color}05`} 
-          style={styles.bgIcon} 
+
+        <MaterialCommunityIcons
+          name={category.icon}
+          size={width * 0.9}
+          color={`${category.color}05`}
+          style={styles.bgIcon}
         />
 
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
             <MaterialCommunityIcons name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          
+
           <View style={styles.timerContainer}>
             <MaterialCommunityIcons name="clock-outline" size={18} color={timeLeft < 10 ? COLORS.error : category.color} />
             <Text style={[styles.timerText, { color: timeLeft < 10 ? COLORS.error : category.color }]}>{timeLeft}s</Text>
@@ -272,33 +304,29 @@ const QuizPlayScreen = ({ route, navigation }) => {
               <MaterialCommunityIcons name="gas-station" size={20} color={fuel === 1 ? COLORS.error : category.color} />
             </Animated.View>
             <View style={styles.fuelRow}>
-              {[1, 2, 3].map(i => (
-                <View 
-                  key={i} 
+              {[1, 2, 3].map((i) => (
+                <View
+                  key={i}
                   style={[
-                    styles.fuelBit, 
-                    { backgroundColor: i <= fuel ? category.color : 'rgba(255, 255, 255, 0.1)' }
-                  ]} 
+                    styles.fuelBit,
+                    { backgroundColor: i <= fuel ? category.color : 'rgba(255, 255, 255, 0.1)' },
+                  ]}
                 />
               ))}
             </View>
           </View>
         </View>
 
-        <Animated.View style={[styles.content, { transform: [{ translateX: shakeAnim }] }]}>
+        <Animated.View style={[styles.content, { transform: [{ translateX: shakeAnim }] }]}> 
           <View style={styles.progressRow}>
             <Text style={styles.missionProgress}>{category.missionType.toUpperCase()} DATA STREAM</Text>
-            <Text style={[styles.questionCounter, { color: category.color }]}>{currentQuestionIndex + 1}/{questions.length}</Text>
+            <Text style={[styles.questionCounter, { color: category.color }]}>{currentQuestionIndex + 1}/{totalQuestions}</Text>
           </View>
-          
-          <ProgressTracker 
-            current={currentQuestionIndex + 1} 
-            total={questions.length} 
-            color={category.color}
-          />
+
+          <ProgressTracker current={currentQuestionIndex + 1} total={totalQuestions} color={category.color} />
 
           <GlassCard style={styles.questionCard}>
-            <View style={[styles.diffBadge, { backgroundColor: `${category.color}20` }]}>
+            <View style={[styles.diffBadge, { backgroundColor: `${category.color}20` }]}> 
               <Text style={[styles.diffText, { color: category.color }]}>{currentQuestion.difficulty.toUpperCase()}</Text>
             </View>
             <Text style={styles.questionText}>{currentQuestion.question}</Text>
@@ -321,30 +349,41 @@ const QuizPlayScreen = ({ route, navigation }) => {
 
         {isAnswered && (
           <View style={styles.footer}>
-            <GlassCard style={[
-              styles.explanationCard, 
-              { borderColor: selectedOption === currentQuestion.correctAnswer ? COLORS.success + '40' : COLORS.error + '40' }
-            ]}>
+            <GlassCard
+              style={[
+                styles.explanationCard,
+                {
+                  borderColor:
+                    selectedOption === currentQuestion.correctAnswer ? COLORS.success + '40' : COLORS.error + '40',
+                },
+              ]}
+            >
               <View style={styles.explanationHeader}>
-                <MaterialCommunityIcons 
-                  name={selectedOption === currentQuestion.correctAnswer ? "check-circle" : "alert-circle"} 
-                  size={20} 
-                  color={selectedOption === currentQuestion.correctAnswer ? COLORS.success : COLORS.error} 
+                <MaterialCommunityIcons
+                  name={selectedOption === currentQuestion.correctAnswer ? 'check-circle' : 'alert-circle'}
+                  size={20}
+                  color={selectedOption === currentQuestion.correctAnswer ? COLORS.success : COLORS.error}
                 />
-                <Text style={[
-                  styles.explanationTitle, 
-                  { color: selectedOption === currentQuestion.correctAnswer ? COLORS.success : COLORS.error }
-                ]}>
+                <Text
+                  style={[
+                    styles.explanationTitle,
+                    { color: selectedOption === currentQuestion.correctAnswer ? COLORS.success : COLORS.error },
+                  ]}
+                >
                   {selectedOption === currentQuestion.correctAnswer ? 'TRANSMISSION_CLEARED' : 'SIGNAL_INTERFERENCE'}
                 </Text>
               </View>
               <Text style={styles.explanationText}>{currentQuestion.explanation}</Text>
             </GlassCard>
-            <NeonButton 
-              title={currentQuestionIndex === questions.length - 1 ? "COMPLETE MISSION" : "PROCEED TO NEXT"} 
-              onPress={handleNext}
-              style={[styles.nextButton, { backgroundColor: category.color }]}
-            />
+            <NeonButton
+              title={
+    currentQuestionIndex === totalQuestions - 1
+      ? 'COMPLETE MISSION'
+      : 'PROCEED TO NEXT'
+  }
+  onPress={handleNext}
+  style={styles.nextButton}
+/>
           </View>
         )}
       </View>

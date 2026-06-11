@@ -1,142 +1,111 @@
-import * as Device from 'expo-device';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Platform } from 'react-native';
+import { Alert, Vibration } from 'react-native';
 
-// Detect if running in Expo Go
-export const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-let Notifications;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-  } catch (e) {
-    console.warn('[Notifications] Could not require expo-notifications');
-  }
-}
-
-
-// Lazy initialization to prevent top-level crashes in Expo Go
-export const initNotifications = () => {
-  if (isExpoGo) {
-    console.log('[Notifications] Skipping initialization in Expo Go (SDK 53+ restriction)');
-    return;
-  }
-
-  try {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-    console.log('[Notifications] Handler configured successfully');
-  } catch (error) {
-    console.warn('[Notifications] Failed to set notification handler:', error);
-  }
+const vibrate = (pattern = [0, 250, 250]) => {
+    Vibration.vibrate(pattern);
 };
 
+const showLocalAlert = (title, message) => {
+    Alert.alert(title, message);
+};
 
+export const initNotifications = async () => {
+    console.log('[Notifications] Expo notifications removed; local alerts remain available.');
+    return true;
+};
 
-/**
- * Registers the device for push notifications and returns the Expo Push Token.
- * Gracefully handles Expo Go by skipping push-specific registration.
- */
 export const registerForPushNotificationsAsync = async () => {
-  if (isExpoGo) {
-    console.log('[Notifications] Skipping push notification registration entirely in Expo Go (SDK 53+ restriction)');
-    return 'expo-go-limit';
-  }
+    console.log('[Notifications] Push notification registration removed.');
+    return null;
+};
 
-  let token;
+export const sendSatellitePassNotification = async (
+    satelliteName,
+    city,
+    minutesAway,
+    direction
+) => {
+    vibrate([0, 250, 250]);
+    showLocalAlert(
+        `${satelliteName} Approaching!`,
+        `${satelliteName} will pass over ${city} in ${minutesAway} minutes. Look towards the ${direction} sky!`
+    );
+    return true;
+};
 
-  try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('satellite-alerts', {
-        name: 'Satellite Alerts',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#00FFFF',
-        description: 'Alerts for upcoming satellite passes',
-      });
-    }
+export const requestNotificationPermissions = async () => true;
 
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+export const sendETANotification = async (
+    satelliteName,
+    etaSeconds,
+    distance,
+    bearing,
+    direction
+) => {
+    const minutes = Math.floor(etaSeconds / 60);
+    const seconds = Math.floor(etaSeconds % 60);
+    let title = `${satelliteName} update`;
+    let body = `${satelliteName} update is available.`;
 
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== 'granted') {
-        console.warn('Failed to get push token for push notification!');
-        return null;
-      }
-
-      const projectId = 
-        Constants?.expoConfig?.extra?.eas?.projectId ?? 
-        Constants?.easConfig?.projectId;
-        
-      if (!projectId) {
-        console.warn('Project ID not found in config. Push notifications may fail.');
-        return 'missing-project-id';
-      }
-
-      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('Expo Push Token:', token);
+    if (etaSeconds < 0) {
+        title = 'Satellite exiting';
+        body = `${satelliteName} is moving away from your location.`;
+    } else if (etaSeconds < 30) {
+        title = 'DIRECTLY OVERHEAD!';
+        body = `${satelliteName} is now passing directly above you! Look up!`;
+    } else if (etaSeconds < 120) {
+        title = `${satelliteName} overhead in 1-2 min`;
+        body = `${satelliteName} will pass above you in ${minutes}:${String(seconds).padStart(2, '0')}. Look ${direction}!`;
+    } else if (etaSeconds < 300) {
+        title = `${satelliteName} in ${minutes} minutes`;
+        body = `${satelliteName} is approaching from ${direction} (${distance}km). ETA: ${minutes}:${String(seconds).padStart(2, '0')}`;
+    } else if (etaSeconds < 600) {
+        title = `${satelliteName} approaching`;
+        body = `${satelliteName} will pass nearby in ~${minutes} minutes. ${distance}km away, moving ${direction}.`;
     } else {
-      console.log('Must use physical device for Push Notifications');
-      return 'emulator';
+        return false;
     }
-  } catch (e) {
-    console.error('Error during notification registration:', e);
-    return 'error';
-  }
 
-  return token;
+    vibrate([0, 250, 250]);
+    showLocalAlert(title, body);
+    return true;
 };
 
-
-/**
- * Sends a local notification immediately.
- */
-export const sendSatellitePassNotification = async (satelliteName, city, minutesAway, direction) => {
-  if (isExpoGo) {
-    console.log('[Notifications] Skipping local notification in Expo Go');
-    return;
-  }
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `🚀 ${satelliteName} Approaching!`,
-        body: `${satelliteName} will pass over ${city} in ${minutesAway} minutes. Look towards the ${direction} sky!`,
-        data: { satelliteName, type: 'pass_alert' },
-        sound: true,
-        priority: Notifications.AndroidNotificationPriority.MAX,
-      },
-      trigger: null, // Send immediately
-    });
-  } catch (error) {
-    console.error('Error scheduling notification:', error);
-  }
+export const send5MinutesBeforeNotification = async (satelliteName, direction) => {
+    vibrate([0, 200, 100, 200]);
+    showLocalAlert(
+        `${satelliteName} in 5 minutes`,
+        `${satelliteName} will pass above your location from the ${direction}. Get ready!`
+    );
+    return true;
 };
 
-/**
- * Request basic notification permissions (useful for local alerts)
- */
-export const requestNotificationPermissions = async () => {
-  if (isExpoGo) {
-    return false;
-  }
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  
-  return finalStatus === 'granted';
+export const send2MinutesBeforeNotification = async (
+    satelliteName,
+    direction,
+    distance
+) => {
+    vibrate([0, 300, 200, 300, 200, 300]);
+    showLocalAlert(
+        `${satelliteName} in 2 minutes!`,
+        `${satelliteName} will pass above you in 2 minutes from the ${direction} (${distance}km)!`
+    );
+    return true;
+};
+
+export const sendOverheadNotification = async (satelliteName) => {
+    vibrate([0, 100, 50, 100, 50, 100, 50, 100]);
+    showLocalAlert(
+        `${satelliteName} OVERHEAD!`,
+        `${satelliteName} is now directly above you! Look up immediately!`
+    );
+    return true;
+};
+
+export const sendExitingNotification = async (satelliteName) => {
+    vibrate([0, 200]);
+    showLocalAlert(
+        `${satelliteName} Exiting`,
+        `${satelliteName} has passed and is moving away from your location.`
+    );
+    return true;
 };

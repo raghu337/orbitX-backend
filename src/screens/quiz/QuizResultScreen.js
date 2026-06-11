@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  Animated,
-  Dimensions,
-  ScrollView 
-} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useEffect, useRef, useState } from 'react';
+import {
+    Animated,
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import BackgroundGradient from '../../components/BackgroundGradient';
 import GlassCard from '../../components/GlassCard';
 import NeonButton from '../../components/NeonButton';
@@ -17,9 +17,8 @@ import { COLORS, FONTS, SPACING } from '../../theme/theme';
 const { width } = Dimensions.get('window');
 
 const QuizResultScreen = ({ route, navigation }) => {
-  const { score, total, category, failed } = route.params;
-  const percentage = Math.round((score / total) * 100);
-  const xpEarned = failed ? 0 : Math.round((score / total) * category.xp);
+  const { score, total, category, failed, xpEarned = 0, accuracy = total ? Math.round((score / total) * 100) : 0 } = route.params;
+  const percentage = accuracy;
 
   // Category specific titles
   const getAchievement = () => {

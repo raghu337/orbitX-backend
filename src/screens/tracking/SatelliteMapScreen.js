@@ -12,6 +12,7 @@ export default function SatelliteMapScreen() {
   const [loading, setLoading] = useState(true);
   const [userLoc, setUserLoc] = useState(null);
   const mapRef = useRef(null);
+  const firstCentered = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -35,15 +36,29 @@ export default function SatelliteMapScreen() {
         const next = (prev && Array.isArray(prev)) ? [...prev] : [];
         updates.forEach((u) => {
           const idx = next.findIndex((s) => s.noradId === u.noradId);
-          const payload = { noradId: u.noradId, name: (u.name || `SAT ${u.noradId}`), telemetry: u };
+          const payload = { noradId: u.noradId, name: (u.name || `SAT ${u.noradId}`), category: u.category || (u && u.category) || null, telemetry: u };
           if (idx >= 0) next[idx] = { ...next[idx], ...payload }; else next.push(payload);
         });
         return next;
       });
+      // center map on first received satellite once
+      if (!firstCentered.current && updates.length && mapRef.current) {
+        const u = updates[0];
+        if (u && typeof u.latitude === 'number' && typeof u.longitude === 'number') {
+          try {
+            mapRef.current.animateToRegion({ latitude: u.latitude, longitude: u.longitude, latitudeDelta: 40, longitudeDelta: 40 }, 800);
+            firstCentered.current = true;
+          } catch (e) {}
+        }
+      }
     }, 5000);
 
     return () => { mounted = false; unsubscribe && unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    console.debug('[SatelliteMapScreen] satellites state length=', satellites.length);
+  }, [satellites]);
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#33ccff" /></View>;
 
@@ -61,7 +76,7 @@ export default function SatelliteMapScreen() {
           </Marker>
         )}
 
-        {(satellites || []).map((s) => {
+        {(satellites || []).map((s, idx) => {
           const t = s.telemetry || {};
           const lat = typeof t.latitude === 'number' ? t.latitude : null;
           const lng = typeof t.longitude === 'number' ? t.longitude : null;
@@ -75,12 +90,21 @@ export default function SatelliteMapScreen() {
             const a = (i / 10) * Math.PI * 2;
             path.push({ latitude: lat + (Math.sin(a) * 0.5), longitude: lng + (Math.cos(a) * 0.5) });
           }
+          const key = `sat-${s.noradId}-${idx}`;
+          // choose color by category or name
+          const cat = (s.category || '').toLowerCase();
+          let color = '#33ccff';
+          if (s.noradId === 25544 || (s.name || '').toLowerCase().includes('iss')) color = '#ffd700';
+          else if (cat.includes('starlink') || (s.name || '').toLowerCase().includes('starlink')) color = '#00ffff';
+          else if (cat.includes('gps') || (s.name || '').toLowerCase().includes('gps')) color = '#33ff33';
+          else if (cat.includes('weather') || (s.name || '').toLowerCase().includes('noaa') || (s.name || '').toLowerCase().includes('npp')) color = '#ff8c00';
+          console.debug('[SatelliteMapScreen] rendering marker', key, lat, lng, s.name, 'color=', color);
           return (
-            <React.Fragment key={String(s.noradId)}>
-              <Marker coordinate={{ latitude: lat, longitude: lng }} title={s.name} description={`Alt: ${t.altitude ?? '—'} km`}>
-                <MaterialCommunityIcons name="satellite-variant" size={26} color="#33ccff" />
-              </Marker>
-              <Polyline coordinates={path} strokeColor="#33ccff" strokeWidth={1} />
+            <React.Fragment key={key}>
+              <Marker.Animated coordinate={{ latitude: lat, longitude: lng }} title={s.name} description={`Alt: ${t.altitude ?? '—'} km`}>
+                <MaterialCommunityIcons name="satellite-variant" size={26} color={color} />
+              </Marker.Animated>
+              <Polyline coordinates={path} strokeColor={color} strokeWidth={1} />
             </React.Fragment>
           );
         })}

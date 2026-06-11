@@ -1,32 +1,39 @@
-import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  ScrollView, 
-  TouchableOpacity,
-  Alert 
-} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useState } from 'react';
+import {
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import BackgroundGradient from '../../components/BackgroundGradient';
 import SectionHeader from '../../components/dashboard/SectionHeader';
-import NotificationSettingsCard from '../../components/settings/NotificationSettingsCard';
 import NeonButton from '../../components/NeonButton';
+import NotificationSettingsCard from '../../components/settings/NotificationSettingsCard';
+import SatelliteProximityAlertCard from '../../components/settings/SatelliteProximityAlertCard';
 import { useAuth } from '../../hooks/useAuth';
+import { useSatelliteAlerts } from '../../hooks/useSatelliteAlerts';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
 
 const SettingsScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const {
+    notificationsEnabled,
+    proximityAlertsEnabled,
+    trackedAlerts,
+    toggleNotifications,
+    toggleProximityAlerts,
+  } = useSatelliteAlerts();
+
   const [settings, setSettings] = useState({
-    passes: true,
-    facts: true,
-    streak: true,
+    passes: false,
+    facts: false,
+    streak: false,
     silent: false,
   });
 
   const toggleSetting = (key) => {
-    // Notifications are currently disabled in this build
-    // Local state is maintained for UI consistency
     setSettings(prev => ({
       ...prev,
       [key]: !prev[key]
@@ -60,20 +67,30 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={styles.profileEmail}>{user?.email || 'Awaiting command...'}</Text>
         </View>
 
-        {/* Notification Settings */}
-        <SectionHeader title="Alert Notifications" />
+        {/* Real-Time Alerts */}
+        <SectionHeader title="Real-Time Satellite Alerts" />
+        <View style={styles.section}>
+          <SatelliteProximityAlertCard
+            enabled={proximityAlertsEnabled}
+            onToggle={toggleProximityAlerts}
+            trackedAlerts={trackedAlerts}
+          />
+        </View>
+
+        {/* Legacy Notification Settings */}
+        <SectionHeader title="Notification Preferences" />
         <View style={styles.section}>
           <NotificationSettingsCard
-            title="Satellite Passes"
-            description="Get alerted 5 minutes before visible satellite passes. (Disabled)"
+            title="Pass Predictions"
+            description={notificationsEnabled ? 'Enabled - Get alerts for upcoming passes' : 'Get alerted 5 minutes before visible satellite passes.'}
             icon="satellite-variant"
-            value={settings.passes}
-            onValueChange={() => toggleSetting('passes')}
+            value={notificationsEnabled}
+            onValueChange={toggleNotifications}
             color={COLORS.primary}
           />
           <NotificationSettingsCard
             title="Daily Space Facts"
-            description="Receive a curated space fact every morning. (Disabled)"
+            description="Receive a curated space fact every morning. (Coming soon)"
             icon="lightbulb-on"
             value={settings.facts}
             onValueChange={() => toggleSetting('facts')}
@@ -81,7 +98,7 @@ const SettingsScreen = ({ navigation }) => {
           />
           <NotificationSettingsCard
             title="Streak Reminders"
-            description="Remind me to complete my daily quiz. (Disabled)"
+            description="Remind me to complete my daily quiz. (Coming soon)"
             icon="fire"
             value={settings.streak}
             onValueChange={() => toggleSetting('streak')}

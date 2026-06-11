@@ -1,7 +1,7 @@
+import { ASTROPHYSICS_QUESTIONS } from './questions/astrophysics';
+import { DEEP_SPACE_QUESTIONS } from './questions/deepspace';
 import { PLANETARY_QUESTIONS } from './questions/planetary';
 import { SATELLITE_QUESTIONS } from './questions/satellite';
-import { DEEP_SPACE_QUESTIONS } from './questions/deepspace';
-import { ASTROPHYSICS_QUESTIONS } from './questions/astrophysics';
 
 /**
  * All datasets mapped by category title.
@@ -9,8 +9,16 @@ import { ASTROPHYSICS_QUESTIONS } from './questions/astrophysics';
  */
 export const ALL_QUESTIONS = {
   'Planetary Science': PLANETARY_QUESTIONS,
+  'Solar System': PLANETARY_QUESTIONS,
+  'Planets': PLANETARY_QUESTIONS,
   'Satellite Tech': SATELLITE_QUESTIONS,
+  'ISS': SATELLITE_QUESTIONS,
+  'NASA Missions': SATELLITE_QUESTIONS,
+  'Space Technology': SATELLITE_QUESTIONS,
   'Deep Space': DEEP_SPACE_QUESTIONS,
+  'Stars': DEEP_SPACE_QUESTIONS,
+  'Galaxies': DEEP_SPACE_QUESTIONS,
+  'Black Holes': ASTROPHYSICS_QUESTIONS,
   'Astrophysics': ASTROPHYSICS_QUESTIONS,
 };
 

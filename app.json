@@ -7,16 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "orbitx",
     "userInterfaceStyle": "automatic",
-
     "extra": {
-      "N2YO_API_KEY": "your_real_n2yo_api_key_here"
+      "N2YO_API_KEY": "your_real_n2yo_api_key_here",
+      "OLLAMA_BASE_URL": ""
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.orbitx.app"
     },
-
     "android": {
       "package": "com.orbitx.app",
       "adaptiveIcon": {
@@ -28,12 +26,10 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       [
         "expo-splash-screen",
@@ -46,7 +42,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ]
   }
 }

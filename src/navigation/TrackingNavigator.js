@@ -1,9 +1,8 @@
-import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import SatelliteTrackerScreen from '../screens/tracking/SatelliteTrackerScreen';
-import SatelliteDetailScreen from '../screens/tracking/SatelliteDetailScreen';
+import LiveTracking from '../screens/LiveTracking';
 import OrbitVisualizationScreen from '../screens/tracking/OrbitVisualizationScreen';
 import SatelliteAlertScreen from '../screens/tracking/SatelliteAlertScreen';
+import SatelliteDetailScreen from '../screens/tracking/SatelliteDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,7 +14,7 @@ const TrackingNavigator = () => {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="TrackerMain" component={SatelliteTrackerScreen} />
+      <Stack.Screen name="TrackerMain" component={LiveTracking} />
       <Stack.Screen name="SatelliteDetail" component={SatelliteDetailScreen} />
       <Stack.Screen name="OrbitVisualization" component={OrbitVisualizationScreen} />
       <Stack.Screen name="SatelliteAlerts" component={SatelliteAlertScreen} />

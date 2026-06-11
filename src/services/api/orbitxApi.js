@@ -1,39 +1,39 @@
-import { Platform } from 'react-native';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-// ── Base URL ─────────────────────────────────────────────────────────────────
+// â”€â”€ Base URL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // IMPORTANT: Set MACHINE_IP to your PC's Wi-Fi IPv4 address.
 //
 // How to find it on Windows:
 //   1. Open PowerShell and run: ipconfig
-//   2. Look for "Wi-Fi" adapter → "IPv4 Address"
+//   2. Look for "Wi-Fi" adapter â†’ "IPv4 Address"
 //   3. Copy that IP here (e.g., 10.230.206.98)
 //
 // Requirements:
-//   • Your PC and Android device MUST be on the same Wi-Fi network
-//   • Windows Firewall must allow inbound TCP on port 8000
+//   â€¢ Your PC and Android device MUST be on the same Wi-Fi network
+//   â€¢ Windows Firewall must allow inbound TCP on port 8000
 //     (run start_backend.ps1 as Administrator to fix this automatically)
-//   • Backend must be started with: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+//   â€¢ Backend must be started with: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 //
-const MACHINE_IP = '10.230.206.98'; // ← Your PC's Wi-Fi IPv4 address
+const MACHINE_IP = '10.165.42.98'; // Auto-set by start_backend.ps1 // â† Your PC's Wi-Fi IPv4 address
 
 // Build base URL: always use MACHINE_IP to ensure real devices connect reliably
 const BASE_URL = `http://${MACHINE_IP}:8000/api/v1`;
 
-export const OFFLINE_MODE = true; // Set to true to work entirely frontend-only without a backend
+export const OFFLINE_MODE = false; // Set to true to work entirely frontend-only without a backend
 
-console.log(`[API] ════════════════════════════════════════`);
+console.log(`[API] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`);
 console.log(`[API] OrbitX API initializing`);
 console.log(`[API]   Platform  : ${Platform.OS}`);
 console.log(`[API]   Base URL  : ${BASE_URL}`);
 console.log(`[API]   Target IP : ${MACHINE_IP}`);
-console.log(`[API] ════════════════════════════════════════`);
+console.log(`[API] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`);
 
-// ── Axios Instance ────────────────────────────────────────────────────────────
+// â”€â”€ Axios Instance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const orbitxApi = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000, // 10s — balanced timeout to prevent infinite loading
+  timeout: 10000, // 10s â€” balanced timeout to prevent infinite loading
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -41,7 +41,7 @@ const orbitxApi = axios.create({
 });
 
 
-// ── Request Interceptor ───────────────────────────────────────────────────────
+// â”€â”€ Request Interceptor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 orbitxApi.interceptors.request.use(
   async (config) => {
     // Attach auth token if available
@@ -62,13 +62,13 @@ orbitxApi.interceptors.request.use(
         : '[Object/FormData]'
       : 'none';
 
-    console.log(`\n[API ▶ Request] ──────────────────────────────`);
+    console.log(`\n[API â–¶ Request] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€`);
     console.log(`[API]   Method  : ${config.method?.toUpperCase()}`);
     console.log(`[API]   Full URL: ${fullUrl}`);
     console.log(`[API]   C-Type  : ${config.headers['Content-Type']}`);
     console.log(`[API]   Body    : ${body}`);
     console.log(`[API]   Timeout : ${config.timeout}ms`);
-    console.log(`[API] ──────────────────────────────────────────`);
+    console.log(`[API] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€`);
 
     return config;
   },
@@ -79,11 +79,11 @@ orbitxApi.interceptors.request.use(
 );
 
 
-// ── Response Interceptor ──────────────────────────────────────────────────────
+// â”€â”€ Response Interceptor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 orbitxApi.interceptors.response.use(
   (response) => {
     const url = response.config?.url ?? 'unknown';
-    console.log(`[API ✓ Response] ${response.status} from ${url}`);
+    console.log(`[API âœ“ Response] ${response.status} from ${url}`);
     return response;
   },
   async (error) => {
@@ -92,16 +92,16 @@ orbitxApi.interceptors.response.use(
     const status = error.response?.status;
     const timeoutMs = error.config?.timeout;
 
-    console.log(`\n[API ✗ Error] ─────────────────────────────────`);
+    console.log(`\n[API âœ— Error] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€`);
 
     if (error.code === 'ECONNABORTED') {
-      // Timeout — server took too long
+      // Timeout â€” server took too long
       console.error(`[API]   Type    : TIMEOUT`);
       console.error(`[API]   URL     : ${fullUrl}`);
       console.error(`[API]   After   : ${timeoutMs}ms`);
       console.error(`[API]   Fix     : Is backend running? Is device on same WiFi as ${MACHINE_IP}?`);
     } else if (!error.response) {
-      // Network error — no response received at all
+      // Network error â€” no response received at all
       console.error(`[API]   Type    : NETWORK ERROR (no response)`);
       console.error(`[API]   URL     : ${fullUrl}`);
       console.error(`[API]   Message : ${error.message}`);
@@ -111,16 +111,16 @@ orbitxApi.interceptors.response.use(
       console.error(`[API]   Fix 3   : Both devices on SAME WiFi network`);
       console.error(`[API]   Fix 4   : Verify IP ${MACHINE_IP} matches PC's Wi-Fi IPv4`);
     } else {
-      // HTTP error — server responded with an error code
+      // HTTP error â€” server responded with an error code
       console.warn(`[API]   Type    : HTTP ${status}`);
       console.warn(`[API]   URL     : ${fullUrl}`);
       console.warn(`[API]   Body    : ${JSON.stringify(error.response.data)}`);
     }
-    console.log(`[API] ─────────────────────────────────────────\n`);
+    console.log(`[API] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n`);
 
     // Auto-clear token on 401 Unauthorized
     if (status === 401) {
-      console.log('[API] 401 received — clearing stored token');
+      console.log('[API] 401 received â€” clearing stored token');
       try {
         await AsyncStorage.removeItem('userToken');
       } catch (_) {}
@@ -131,14 +131,14 @@ orbitxApi.interceptors.response.use(
 );
 
 
-// ── Connectivity Test ─────────────────────────────────────────────────────────
+// â”€â”€ Connectivity Test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /**
  * Quick ping to verify the backend is reachable before doing auth.
  * Returns { reachable: boolean, latency: number | null, error: string | null }
  */
 export const testBackendConnectivity = async () => {
   if (OFFLINE_MODE) {
-    console.log(`[API Ping] OFFLINE_MODE active — skipping real ping and simulating success.`);
+    console.log(`[API Ping] OFFLINE_MODE active â€” skipping real ping and simulating success.`);
     return { reachable: true, latency: 0, error: null };
   }
 
@@ -150,28 +150,28 @@ export const testBackendConnectivity = async () => {
   try {
     const response = await axios.get(pingUrl, { timeout: 8000 });
     const latency = Date.now() - startTime;
-    console.log(`[API Ping] ✓ Backend reachable — ${latency}ms (status: ${response.status})`);
+    console.log(`[API Ping] âœ“ Backend reachable â€” ${latency}ms (status: ${response.status})`);
     return { reachable: true, latency, error: null };
   } catch (err) {
     const latency = Date.now() - startTime;
     let errorMsg;
 
     if (err.code === 'ECONNABORTED') {
-      errorMsg = `Timeout after ${latency}ms — backend running but too slow, or wrong IP`;
+      errorMsg = `Timeout after ${latency}ms â€” backend running but too slow, or wrong IP`;
     } else if (!err.response) {
-      errorMsg = `No response from ${MACHINE_IP}:8000 — backend not running or firewall blocking`;
+      errorMsg = `No response from ${MACHINE_IP}:8000 â€” backend not running or firewall blocking`;
     } else {
       errorMsg = `HTTP ${err.response?.status} from backend`;
     }
 
-    console.error(`[API Ping] ✗ Backend unreachable: ${errorMsg}`);
+    console.error(`[API Ping] âœ— Backend unreachable: ${errorMsg}`);
     return { reachable: false, latency: null, error: errorMsg };
   }
 };
 
 
 
-// ── Offline Mock Overrides ────────────────────────────────────────────────────
+// â”€â”€ Offline Mock Overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (OFFLINE_MODE) {
   console.warn('[API] OFFLINE_MODE is ENABLED. Using local mock data instead of backend APIs.');
   
@@ -259,5 +259,6 @@ if (OFFLINE_MODE) {
   };
 }
 
-export { MACHINE_IP, BASE_URL };
+export { BASE_URL, MACHINE_IP };
 export default orbitxApi;
+

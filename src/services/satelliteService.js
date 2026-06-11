@@ -1,108 +1,317 @@
 import * as satellite from 'satellite.js';
 
-const BACKEND_URL = global.__DEV__ ? 'http://10.0.2.2:8000/api/v1' : 'https://your-backend.example.com/api/v1';
-const N2YO_API_URL = 'https://api.n2yo.com/rest/v1/satellite';
-// N2YO API key from backend .env - we'll use backend proxy
+const BACKEND_URL = 'http://10.165.42.98:8000/api/v1';
+const EARTH_RADIUS_KM = 6371;
+const LIVE_SATELLITE_DECK = [
+  { id: 'ISS', name: 'ISS', noradId: 25544, color: '#00E5FF' },
+  { id: 'HUBBLE', name: 'Hubble', noradId: 20580, color: '#AFAFFF' },
+  { id: 'NOAA', name: 'NOAA', noradId: 33591, color: '#7CFFB2' },
+  { id: 'STARLINK', name: 'Starlink', noradId: 44238, color: '#42CFFF' },
+  { id: 'GPS', name: 'GPS', noradId: 39227, color: '#BEFF6C' },
+];
+const SIMULATION_COLORS = [
+  '#00E5FF',
+  '#AFAFFF',
+  '#7CFFB2',
+  '#42CFFF',
+  '#BEFF6C',
+  '#FF6CFF',
+  '#6CFF9A',
+  '#FFD24D',
+  '#8CE0FF',
+  '#FF8C6C',
+];
+const SIMULATED_SATELLITE_COUNT = 30;
 
-function safeNumber(v, fallback = 0) {
-  return typeof v === 'number' && isFinite(v) ? v : fallback;
+function normalizeLongitude(value) {
+  return ((value + 180) % 360 + 360) % 360 - 180;
 }
 
-// Fetch live satellite position from N2YO
-async function fetchN2YOPositions(satIds = [], observerLat = 0, observerLng = 0, observerAltKm = 0) {
-  try {
-    // Call backend proxy which will use N2YO API key
-    const idList = satIds.join(',');
-    const res = await fetch(`${BACKEND_URL}/satellites/n2yo-positions?ids=${idList}&lat=${observerLat}&lng=${observerLng}&alt=${observerAltKm}`);
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
-  } catch (e) {
-    // fallback to TLE-based computation
+function validateCoordinate(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
   }
-  return null;
+  return value;
+}
+
+function isValidSatellite(sat) {
+  if (!sat) return false;
+  return (
+    validateCoordinate(sat.latitude) !== null &&
+    validateCoordinate(sat.longitude) !== null
+  );
+}
+
+function filterValidSatellites(data) {
+  if (!Array.isArray(data)) return [];
+  return data.filter(isValidSatellite);
+}
+
+function createSatelliteFleet() {
+  const liveSats = LIVE_SATELLITE_DECK.map((sat, index) => ({
+    ...sat,
+    isLiveSource: true,
+    isSimulated: false,
+    orbitAltitudeKm: 420 + ((index % 3) * 12),
+    orbitInclination: 51.6,
+    orbitPhase: (index * 0.8) % (Math.PI * 2),
+    orbitCenterLongitude: ((index * 60) % 360) - 180,
+    orbitalPeriodMin: 92,
+    orbitDirection: index % 2 === 0 ? 1 : -1,
+  }));
+
+  const simulated = Array.from(
+    { length: SIMULATED_SATELLITE_COUNT - liveSats.length },
+    (_, index) => ({
+      id: `SIM-${index + 1}`,
+      name: `Sat ${index + 1}`,
+      noradId: null,
+      color: SIMULATION_COLORS[index % SIMULATION_COLORS.length],
+      isLiveSource: false,
+      isSimulated: true,
+      orbitInclination: 20 + ((index % 5) * 10),
+      orbitAltitudeKm: 420 + ((index % 7) * 30),
+      orbitalPeriodMin: 88 + ((index % 8) * 2),
+      orbitPhase: ((index + 1) / SIMULATED_SATELLITE_COUNT) * Math.PI * 2,
+      orbitCenterLongitude: ((index * 43) % 360) - 180,
+      orbitDirection: index % 2 === 0 ? 1 : -1,
+    })
+  );
+
+  return [...liveSats, ...simulated];
+}
+
+async function fetchN2YOPositions(
+  satIds = [],
+  observerLat = 0,
+  observerLng = 0,
+  observerAltKm = 0
+) {
+  try {
+    const idList = satIds.join(',');
+    const url =
+      `${BACKEND_URL}/satellites/n2yo-positions` +
+      `?ids=${encodeURIComponent(idList)}` +
+      `&lat=${observerLat}` +
+      `&lng=${observerLng}` +
+      `&alt=${observerAltKm}`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    let data = await res.json();
+    if (!Array.isArray(data)) {
+      data = data ? [data] : [];
+    }
+
+    const valid = filterValidSatellites(data);
+    return valid.length ? valid : null;
+  } catch (e) {
+    console.warn('N2YO Error:', e?.message || e);
+    return null;
+  }
 }
 
 async function fetchTLE(noradId) {
   try {
     const res = await fetch(`${BACKEND_URL}/satellites/${noradId}/tle`);
-    if (!res.ok) throw new Error('no-tle');
+    if (!res.ok) return null;
+
     const json = await res.json();
-    if (json && json.tle1 && json.tle2) return [json.tle1, json.tle2];
-  } catch (e) {
-    try {
-      const r = await fetch(`https://celestrak.com/NORAD/elements/gp.php?CATNR=${noradId}`);
-      const txt = await r.text();
-      const lines = txt.trim().split('\n').map((l) => l.trim()).filter(Boolean);
-      if (lines.length >= 3) return [lines[1], lines[2]];
-    } catch (er) {
-      return null;
-    }
-  }
-  return null;
-}
-
-function computeStateFromTLE(tleLines, when = new Date(), observer = null) {
-  try {
-    const satrec = satellite.twoline2satrec(tleLines[0], tleLines[1]);
-    const posVel = satellite.propagate(satrec, when);
-    const positionEci = posVel.position;
-    const velocityEci = posVel.velocity;
-    if (!positionEci) return null;
-
-    const gmst = satellite.gstime(when);
-    const geodetic = satellite.eciToGeodetic(positionEci, gmst);
-    const longitude = satellite.degreesLong(geodetic.longitude);
-    const latitude = satellite.degreesLat(geodetic.latitude);
-    const altitude = geodetic.height; // km
-
-    // speed magnitude (km/s)
-    const vx = safeNumber(velocityEci.x);
-    const vy = safeNumber(velocityEci.y);
-    const vz = safeNumber(velocityEci.z);
-    const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-
-    // simple orbit type heuristic
-    const orbitType = altitude < 2000 ? 'LEO' : altitude < 35786 ? 'MEO' : 'GEO';
-
-    // visibility: rough check using elevation angle
-    let elevation = null;
-    let visible = false;
-    if (observer && typeof observer.latitude === 'number') {
-      const observerGd = { longitude: satellite.degreesToRadians(observer.longitude), latitude: satellite.degreesToRadians(observer.latitude), height: observer.altitude || 0 };
-      const lookAngles = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(positionEci, gmst));
-      elevation = lookAngles.elevation && satellite.degreesLat(lookAngles.elevation);
-      visible = elevation > 5; // visible if >5deg
+    if (json?.tle1 && json?.tle2) {
+      return [json.tle1, json.tle2];
     }
 
-    return {
-      latitude,
-      longitude,
-      altitude: safeNumber(altitude, 0),
-      speed: safeNumber(speed, 0),
-      orbitType,
-      visibility: visible,
-      elevation,
-      when: when.toISOString(),
-    };
-  } catch (e) {
+    return null;
+  } catch {
     return null;
   }
 }
 
-async function estimateNextPass(tleLines, observer, lookHours = 24) {
-  // naive stepping algorithm: step 30s until elevation > 10 deg
-  try {
-    const stepSec = 30;
-    const now = Date.now();
-    for (let t = now; t < now + lookHours * 3600 * 1000; t += stepSec * 1000) {
-      const state = computeStateFromTLE(tleLines, new Date(t), observer);
-      if (state && state.elevation != null && state.elevation > 10) return { nextPass: new Date(t).toISOString(), elevation: state.elevation };
-    }
-  } catch (e) {
-    // fallthrough
+function computeVisibility(latitude, longitude, altitude, observer) {
+  if (
+    !observer ||
+    typeof observer.latitude !== 'number' ||
+    typeof observer.longitude !== 'number'
+  ) {
+    return false;
   }
+
+  const rad = Math.PI / 180;
+  const lat1 = latitude * rad;
+  const lon1 = longitude * rad;
+  const lat2 = observer.latitude * rad;
+  const lon2 = observer.longitude * rad;
+
+  const cosCentralAngle =
+    Math.sin(lat1) * Math.sin(lat2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2);
+  const centralAngle = Math.acos(Math.min(1, Math.max(-1, cosCentralAngle)));
+  const horizonAngle = Math.acos(
+    EARTH_RADIUS_KM / (EARTH_RADIUS_KM + (altitude || 0))
+  );
+
+  return centralAngle <= horizonAngle;
+}
+
+function estimateNextPassString(when, sat) {
+  const periodMs = (sat?.orbitalPeriodMin || 90) * 60 * 1000;
+  const minimumDelay = 5 * 60 * 1000;
+  const next = new Date(when.getTime() + Math.max(minimumDelay, periodMs * 0.18));
+  return next.toISOString();
+}
+
+function simulateSatelliteState(
+  sat,
+  when = new Date(),
+  observer = { latitude: 20, longitude: 0 }
+) {
+  const phase = typeof sat.orbitPhase === 'number' ? sat.orbitPhase : 0;
+  const direction = sat.orbitDirection || 1;
+  const periodSeconds = (sat.orbitalPeriodMin || 90) * 60;
+  const angle =
+    phase + ((2 * Math.PI) / periodSeconds) * (when.getTime() / 1000) * direction;
+  const inclinationRad = ((sat.orbitInclination || 55) * Math.PI) / 180;
+  const latitude = Math.sin(angle) * Math.sin(inclinationRad) * 68;
+  const longitude = normalizeLongitude(
+    (angle * 180) / Math.PI +
+      (typeof sat.orbitCenterLongitude === 'number'
+        ? sat.orbitCenterLongitude
+        : 0)
+  );
+  const altitude = sat.orbitAltitudeKm ?? 520;
+  const velocity = 7.7 + ((450 - altitude) / 450) * 0.24;
+  const visibility = computeVisibility(latitude, longitude, altitude, observer);
+
+  return {
+    latitude,
+    longitude,
+    altitude,
+    velocity,
+    visibility,
+    nextPass: estimateNextPassString(when, sat),
+    orbitType:
+      altitude < 2000
+        ? 'LEO'
+        : altitude < 35786
+        ? 'MEO'
+        : 'GEO',
+    lastUpdated: when.toISOString(),
+  };
+}
+
+function mergeLiveAndSimulatedPositions(fleet, liveData, observer) {
+  const now = new Date();
+  return fleet.map((sat) => {
+    const live =
+      sat.noradId && Array.isArray(liveData)
+        ? liveData.find((x) => Number(x.satid) === Number(sat.noradId))
+        : null;
+
+    const fallback = simulateSatelliteState(sat, now, observer);
+
+    if (
+      live &&
+      validateCoordinate(Number(live.satlatitude)) !== null &&
+      validateCoordinate(Number(live.satlongitude)) !== null
+    ) {
+      const latitude = Number(live.satlatitude);
+      const longitude = Number(live.satlongitude);
+      const altitude = Number(live.sataltitude) || fallback.altitude;
+      const velocity = Number(live.velocity) || fallback.velocity;
+      const visibility = computeVisibility(latitude, longitude, altitude, observer);
+
+      return {
+        ...sat,
+        latitude,
+        longitude,
+        altitude,
+        velocity,
+        visibility,
+        nextPass: estimateNextPassString(now, sat),
+        orbitType:
+          altitude < 2000
+            ? 'LEO'
+            : altitude < 35786
+            ? 'MEO'
+            : 'GEO',
+        isLive: true,
+        lastUpdated: now.toISOString(),
+      };
+    }
+
+    return {
+      ...sat,
+      ...fallback,
+      isLive: false,
+      lastUpdated: now.toISOString(),
+    };
+  });
+}
+
+function computeStateFromTLE(
+  tleLines,
+  when = new Date(),
+  observer = null
+) {
+  try {
+    const satrec = satellite.twoline2satrec(tleLines[0], tleLines[1]);
+    const posVel = satellite.propagate(satrec, when);
+
+    if (!posVel.position) return null;
+
+    const gmst = satellite.gstime(when);
+    const geo = satellite.eciToGeodetic(posVel.position, gmst);
+
+    const latitude = satellite.degreesLat(geo.latitude);
+    const longitude = satellite.degreesLong(geo.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    const altitude = geo.height;
+    const v = posVel.velocity;
+    const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+
+    return {
+      latitude,
+      longitude,
+      altitude,
+      speed,
+      orbitType:
+        altitude < 2000
+          ? 'LEO'
+          : altitude < 35786
+          ? 'MEO'
+          : 'GEO',
+      when: when.toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function estimateNextPass(
+  tleLines,
+  observer,
+  lookHours = 24
+) {
+  const now = Date.now();
+
+  for (
+    let t = now;
+    t < now + lookHours * 3600 * 1000;
+    t += 30000
+  ) {
+    const state = computeStateFromTLE(tleLines, new Date(t), observer);
+    if (state) {
+      return {
+        nextPass: new Date(t).toISOString(),
+      };
+    }
+  }
+
   return null;
 }
 
@@ -111,4 +320,7 @@ export default {
   fetchTLE,
   computeStateFromTLE,
   estimateNextPass,
+  createSatelliteFleet,
+  simulateSatelliteState,
+  mergeLiveAndSimulatedPositions,
 };

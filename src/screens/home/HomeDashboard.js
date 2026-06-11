@@ -1,11 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { COLORS, FONTS, SHADOWS, SPACING } from '../../theme/theme';
 
@@ -14,7 +14,9 @@ const features = [
   { id: '2', title: 'Live Satellite Tracker', icon: 'satellite-variant', color: COLORS.primary, screen: 'SatelliteTracker' },
   { id: '3', title: 'Planet Explorer', icon: 'earth', color: COLORS.accent, screen: 'PlanetExplorer' },
   { id: '4', title: 'Space Facts', icon: 'book-open-page-variant', color: '#00E5FF', screen: 'SpaceFacts' },
-  { id: '5', title: 'Quiz Zone', icon: 'brain', color: COLORS.success, screen: 'QuizZone' },
+  { id: '5', title: 'NASA APOD', icon: 'image-outline', color: COLORS.warning, screen: 'NASA_APOD' },
+  { id: '6', title: 'APOD Favorites', icon: 'heart-multiple-outline', color: COLORS.success, screen: 'APODFavorites' },
+  { id: '7', title: 'Quiz Zone', icon: 'brain', color: COLORS.success, screen: 'QuizZone' },
 ];
 
 const GlassCard = ({ title, icon, color, onPress }) => (
@@ -132,5 +134,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
 export default HomeDashboard;

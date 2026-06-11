@@ -1,54 +1,87 @@
-from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.schemas.satellite import Satellite
-from app.models.satellite import Satellite as SatelliteModel, Favorite as FavoriteModel
-from app.models.user import User as UserModel
-from app.core import deps
-from app.db.session import get_db
-from fastapi import Body
-import httpx
-from app.models.satellite import SatelliteTracking as TrackingModel
-from app.schemas.satellite import SatelliteTracking
+import asyncio
 from datetime import datetime
+from typing import Any, List
+
+import httpx
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.core import deps
 from app.core.config import settings
+from app.db.session import get_db
+from app.models.satellite import Favorite as FavoriteModel
+from app.models.satellite import Satellite as SatelliteModel
+from app.models.satellite import SatelliteTracking as TrackingModel
+from app.models.user import User as UserModel
+from app.schemas.satellite import Satellite, SatelliteTracking
 
 router = APIRouter()
 
-# N2YO API proxy endpoint for real-time satellite positions
+async def fetch_n2yo_position(client: httpx.AsyncClient, sat_id: int, lat: float, lng: float, alt: int) -> Any:
+    url = f"https://api.n2yo.com/rest/v1/satellite/positions/{sat_id}/{lat}/{lng}/{alt}/1/?apiKey={settings.N2YO_API_KEY}"
+    resp = await client.get(url)
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    position = data.get("positions")
+    if not position or not isinstance(position, list):
+        return None
+    pos = position[0]
+    visibility = True
+    if isinstance(pos.get("visibility"), str):
+        visibility = pos.get("visibility").lower() != "eclipsed"
+    return {
+        "noradId": sat_id,
+        "satid": sat_id,
+        "satname": data.get("satname", f"SAT {sat_id}"),
+        "latitude": float(pos.get("satlatitude", 0) or 0),
+        "longitude": float(pos.get("satlongitude", 0) or 0),
+        "altitude": float(pos.get("sataltitude", 0) or 0),
+        "azimuth": float(pos.get("azimuth", 0) or 0),
+        "elevation": float(pos.get("elevation", 0) or 0),
+        "visibility": visibility,
+        "timestamp": data.get("timestamp") or datetime.utcnow().isoformat(),
+    }
+
 @router.get("/n2yo-positions")
-def get_n2yo_positions(ids: str, lat: float, lng: float, alt: int = 0) -> Any:
-    """Fetch real-time satellite positions from N2YO API. Requires N2YO_API_KEY in .env"""
+async def get_n2yo_positions(
+    ids: str = Query(..., description="Comma-separated NORAD IDs"),
+    lat: float = Query(..., description="Observer latitude"),
+    lng: float = Query(..., description="Observer longitude"),
+    alt: int = Query(0, description="Observer altitude in meters"),
+) -> Any:
     if not settings.N2YO_API_KEY:
-        return {"detail": "N2YO API key not configured", "satellites": []}
-    
+        raise HTTPException(status_code=500, detail="N2YO API key is not configured on the server.")
+
+    sat_ids = [int(s.strip()) for s in ids.split(",") if s.strip().isdigit()]
+    if not sat_ids:
+        raise HTTPException(status_code=400, detail="No valid satellite IDs provided.")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Limit concurrent requests to N2YO to avoid rate/connection issues
+        sem = asyncio.Semaphore(10)
+
+        async def sem_task(sid):
+            async with sem:
+                return await fetch_n2yo_position(client, sid, lat, lng, alt)
+
+        tasks = [sem_task(sat_id) for sat_id in sat_ids]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+    results = []
+    for resp in responses:
+        if isinstance(resp, dict):
+            results.append(resp)
+
+    # Debug: log full batch result for troubleshooting (server logs)
     try:
-        results = []
-        sat_ids = [int(s.strip()) for s in ids.split(',') if s.strip()]
-        for sat_id in sat_ids:
-            try:
-                url = f"https://api.n2yo.com/rest/v1/satellite/positions/{sat_id}/{lat}/{lng}/{alt}/1/?apiKey={settings.N2YO_API_KEY}"
-                resp = httpx.get(url, timeout=10.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('positions'):
-                        pos = data['positions'][0]
-                        results.append({
-                            'noradId': sat_id,
-                            'satid': sat_id,
-                            'satname': data.get('satname', f'SAT {sat_id}'),
-                            'latitude': float(pos.get('satlatitude', 0)),
-                            'longitude': float(pos.get('satlongitude', 0)),
-                            'altitude': float(pos.get('sataltitude', 400)),
-                            'azimuth': float(pos.get('azimuth', 0)),
-                            'elevation': float(pos.get('elevation', 0)),
-                            'visibility': pos.get('visibility') == 'eclipsed' or pos.get('elevation', 0) > 5,
-                        })
-            except Exception as e:
-                pass
-        return results
-    except Exception as e:
-        return {"detail": str(e), "satellites": []}
+        print(f"[N2YO] /satellites/n2yo-positions request ids={sat_ids} -> returned {len(results)} items")
+        # print full JSON (careful in prod, this is for debug)
+        print("[N2YO] full payload:", results)
+    except Exception:
+        pass
+
+    return results
 
 @router.get("/", response_model=List[Satellite])
 def read_satellites(
@@ -79,44 +112,44 @@ def favorite_satellite(
     satellite = db.query(SatelliteModel).filter(SatelliteModel.id == satellite_id).first()
     if not satellite:
         raise HTTPException(status_code=404, detail="Satellite not found")
-    
+
     favorite = FavoriteModel(user_id=current_user.id, satellite_id=satellite_id)
     db.add(favorite)
     db.commit()
     return satellite
 
-
 @router.get("/{id}/tle")
-def get_tle_for_satellite(id: int):
-    """Return a TLE for the requested satellite if available. This attempts to fetch from Celestrak as a fallback."""
+async def get_tle_for_satellite(id: int) -> Any:
     try:
-        r = httpx.get(f"https://celestrak.com/NORAD/elements/gp.php?CATNR={id}", timeout=10.0)
-        if r.status_code == 200:
-            lines = [l.strip() for l in r.text.split('\n') if l.strip()]
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(f"https://celestrak.com/NORAD/elements/gp.php?CATNR={id}")
+        if response.status_code == 200:
+            lines = [l.strip() for l in response.text.split("\n") if l.strip()]
             if len(lines) >= 3:
                 return {"tle1": lines[1], "tle2": lines[2]}
-    except Exception:
+    except httpx.HTTPError:
         pass
-    return {"detail": "TLE not found"}
-
+    raise HTTPException(status_code=404, detail="TLE not found")
 
 @router.get("/{id}/telemetry", response_model=List[SatelliteTracking])
 def get_satellite_telemetry(id: int, db: Session = Depends(get_db)) -> Any:
-    tracking_data = db.query(TrackingModel).filter(TrackingModel.satellite_id == id).order_by(
-        TrackingModel.timestamp.desc()
-    ).limit(100).all()
+    tracking_data = (
+        db.query(TrackingModel)
+        .filter(TrackingModel.satellite_id == id)
+        .order_by(TrackingModel.timestamp.desc())
+        .limit(100)
+        .all()
+    )
     return tracking_data
-
 
 @router.post("/{id}/telemetry", response_model=SatelliteTracking)
 def post_telemetry(id: int, payload: SatelliteTracking = Body(...), db: Session = Depends(get_db)):
-    """Save telemetry for a satellite (used by clients to store live tracking history)."""
     record = TrackingModel(
         satellite_id=id,
         latitude=payload.latitude,
         longitude=payload.longitude,
         altitude=payload.altitude,
-        timestamp=payload.timestamp or datetime.utcnow()
+        timestamp=payload.timestamp or datetime.utcnow(),
     )
     db.add(record)
     db.commit()

@@ -1,26 +1,29 @@
-import * as Notifications from 'expo-notifications';
+import { Alert, Vibration } from 'react-native';
 
-export async function registerForPushNotificationsAsync() {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') return null;
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
-    return token;
-  } catch (e) {
-    return null;
-  }
+const vibrate = (pattern = [0, 250, 250]) => {
+  Vibration.vibrate(pattern);
+};
+
+const showLocalAlert = (title, message) => {
+  Alert.alert(title, message);
+};
+
+export async function initNotifications() {
+  console.log('[Notifications] Expo notification support removed; local alerts remain enabled.');
+  return true;
 }
 
-export function scheduleLocalNotification(title, body, seconds = 1) {
-  Notifications.scheduleNotificationAsync({
-    content: { title, body },
-    trigger: { seconds, repeats: false },
-  });
+export async function requestNotificationPermissions() {
+  return true;
 }
 
-export default { registerForPushNotificationsAsync, scheduleLocalNotification };
+export async function scheduleLocalNotification(title, body, seconds = 1) {
+  vibrate([0, 250, 250]);
+  showLocalAlert(title, body);
+}
+
+export default {
+  initNotifications,
+  requestNotificationPermissions,
+  scheduleLocalNotification,
+};

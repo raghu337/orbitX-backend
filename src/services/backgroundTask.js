@@ -1,19 +1,22 @@
-import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getVisualPasses, SATELLITE_IDS } from './api/satelliteService';
-import { isValidPassForAlert, getCompassDirection } from '../utils/visibilityFilter';
+import * as TaskManager from 'expo-task-manager';
 import { sendSatellitePassNotification } from '../notifications/notificationService';
+import { getCompassDirection, isValidPassForAlert } from '../utils/visibilityFilter';
+import { getVisualPasses, SATELLITE_IDS } from './api/satelliteService';
+import liveService from './liveSatelliteService';
+import satelliteProximityService from './satelliteProximityService';
 
 const SATELLITE_CHECK_TASK = 'SATELLITE_CHECK_TASK';
 const LAST_NOTIFIED_KEY = 'LAST_NOTIFIED_PASS_ID';
 const CACHED_PASSES_KEY = 'CACHED_SATELLITE_PASSES';
+const PROXIMITY_ALERTS_ENABLED_KEY = 'PROXIMITY_ALERTS_ENABLED';
 
 // Define the background task
 TaskManager.defineTask(SATELLITE_CHECK_TASK, async () => {
   try {
-    console.log('[Background Task] Checking for satellite passes...');
+    console.log('[Background Task] Checking for satellite passes and proximity alerts...');
     
     // 1. Get Location
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -27,7 +30,35 @@ TaskManager.defineTask(SATELLITE_CHECK_TASK, async () => {
       lng = location.coords.longitude;
     }
 
-    // 2. Fetch Passes (ISS as priority)
+    // 2. Check if proximity alerts are enabled
+    const proximityEnabled = await AsyncStorage.getItem(PROXIMITY_ALERTS_ENABLED_KEY);
+    
+    if (proximityEnabled === 'true') {
+      // Check proximity for key satellites
+      const proximityCheckSatellites = [
+        SATELLITE_IDS.ISS,
+        SATELLITE_IDS.HUBBLE,
+        SATELLITE_IDS.NOAA,
+      ].filter(Boolean);
+
+      for (const satId of proximityCheckSatellites) {
+        try {
+          const satellite = await liveService.fetchSatellite(satId);
+          if (satellite && satellite.latitude && satellite.longitude) {
+            await satelliteProximityService.checkSatelliteProximity(
+              satellite,
+              lat,
+              lng,
+              `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+            );
+          }
+        } catch (error) {
+          console.warn('[Background Task] Error checking proximity for satellite:', satId, error);
+        }
+      }
+    }
+
+    // 3. Fetch Passes (ISS as priority)
     const { passes, error } = await getVisualPasses(SATELLITE_IDS.ISS, lat, lng);
     
     if (error || !passes || passes.length === 0) {
@@ -35,10 +66,10 @@ TaskManager.defineTask(SATELLITE_CHECK_TASK, async () => {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    // 3. Cache passes for UI
+    // 4. Cache passes for UI
     await AsyncStorage.setItem(CACHED_PASSES_KEY, JSON.stringify(passes));
 
-    // 4. Check for imminent valid pass
+    // 5. Check for imminent valid pass
     const now = Math.floor(Date.now() / 1000);
     const imminentPass = passes.find(pass => {
       const timeToPass = pass.startUTC - now;
