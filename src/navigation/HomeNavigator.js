@@ -2,7 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AIAssistantScreen from '../screens/ai/AIAssistantScreen';
 import ARSkyScannerScreen from '../screens/ar/ARSkyScannerScreen';
 import HomeScreen from '../screens/home/HomeScreen';
-import PlanetExplorerScreen from '../screens/PlanetExplorer';
+import PlanetExplorerScreen from '../screens/learning/PlanetExplorerScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 
 const Stack = createNativeStackNavigator();

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -23,6 +23,70 @@ import { sendSatellitePassNotification } from '../notifications/notificationServ
 import gpsService from '../services/gpsService';
 import { requestNotificationPermissions } from '../services/notificationService';
 import satelliteService from '../services/satelliteService';
+import { BlurView } from 'expo-blur';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { COLORS, FONTS, SHADOWS } from '../theme/theme';
+
+const TACTICAL_SPACE_MAP_STYLE = [
+  {
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#040714" }
+    ]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [
+      { "color": "#00E5FF" }
+    ]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      { "color": "#040714" }
+    ]
+  },
+  {
+    "featureType": "administrative",
+    "elementType": "geometry.stroke",
+    "stylers": [
+      { "color": "#005b66" },
+      { "width": 1 }
+    ]
+  },
+  {
+    "featureType": "landscape",
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#050B1C" }
+    ]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [
+      { "color": "#02040A" }
+    ]
+  },
+  {
+    "featureType": "road",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  },
+  {
+    "featureType": "transit",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  }
+];
 
 const { width } = Dimensions.get('window');
 const ISS_IMAGE = require('../../assets/images/iss.png');
@@ -112,6 +176,7 @@ export default function LiveTracking() {
   const [selectedId, setSelectedId] = useState(null);
   const [focusedSatellite, setFocusedSatellite] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
+  const [showOrbitVectors, setShowOrbitVectors] = useState(true);
   const [tappedSatelliteId, setTappedSatelliteId] = useState(null);
   const tapScaleAnim = useRef(new Animated.Value(1)).current;
   const lastFocusedSatelliteIdRef = useRef(null);
@@ -1285,6 +1350,13 @@ export default function LiveTracking() {
     [centerOnSatellite]
   );
 
+  const handleTargetSwitch = useCallback(() => {
+    if (satellites.length === 0) return;
+    const currentIndex = satellites.findIndex(sat => sat.id === selectedId);
+    const nextIndex = (currentIndex + 1) % satellites.length;
+    handleSelectSatellite(satellites[nextIndex]);
+  }, [satellites, selectedId, handleSelectSatellite]);
+
   const handleMapPress = useCallback(() => {
     lastFocusedSatelliteIdRef.current = null;
     setSelectedId(null);
@@ -1292,11 +1364,7 @@ export default function LiveTracking() {
     setPopupOpen(false);
   }, []);
 
-  const formattedNextPass =
-    selectedSatellite?.nextPass &&
-    !Number.isNaN(Date.parse(selectedSatellite.nextPass))
-      ? new Date(selectedSatellite.nextPass).toLocaleString()
-      : 'TBD';
+  const activeSatForHUD = selectedSatellite || satellites.find((s) => s.id === 'ISS') || satellites[0] || null;
 
   return (
     <View style={styles.container}>
@@ -1397,6 +1465,7 @@ export default function LiveTracking() {
 
       <MapView
         ref={mapRef}
+        customMapStyle={TACTICAL_SPACE_MAP_STYLE}
         style={[
           styles.map,
           alertState.active && alertState.level >= 3 && styles.mapAlert,
@@ -1575,48 +1644,52 @@ export default function LiveTracking() {
           </Marker>
         )}
 
-        {orbitPaths.map(({ satellite: sat, path, futureState }) =>
-          path.length > 1 ? (
-            <Polyline
-              key={`${sat.id}-orbit`}
-              coordinates={path}
-              strokeColor={
-                selectedId === sat.id
-                  ? 'rgba(0, 229, 255, 0.95)'
-                  : 'rgba(0, 229, 255, 0.22)'
-              }
-              strokeWidth={selectedId === sat.id ? 4 : 2}
-              lineCap="round"
-              lineJoin="round"
-              geodesic
-            />
-          ) : null
-        )}
-        {orbitPaths.map(({ satellite: sat, futureState }) =>
-          futureState ? (
-            <Marker
-              key={`${sat.id}-future`}
-              coordinate={{
-                latitude: futureState.latitude,
-                longitude: futureState.longitude,
-              }}
-            >
-              <View
-                style={[
-                  styles.predictedMarker,
-                  selectedId === sat.id && styles.predictedMarkerSelected,
-                ]}
-              />
-            </Marker>
-          ) : null
-        )}
-        {selectedOrbitPoint && (
-          <Marker
-            key="selected-orbit-head"
-            coordinate={selectedOrbitPoint}
-          >
-            <View style={styles.orbitHead} />
-          </Marker>
+        {showOrbitVectors && (
+          <>
+            {orbitPaths.map(({ satellite: sat, path, futureState }) =>
+              path.length > 1 ? (
+                <Polyline
+                  key={`${sat.id}-orbit`}
+                  coordinates={path}
+                  strokeColor={
+                    selectedId === sat.id
+                      ? 'rgba(0, 229, 255, 0.95)'
+                      : 'rgba(0, 229, 255, 0.22)'
+                  }
+                  strokeWidth={selectedId === sat.id ? 4 : 2}
+                  lineCap="round"
+                  lineJoin="round"
+                  geodesic
+                />
+              ) : null
+            )}
+            {orbitPaths.map(({ satellite: sat, futureState }) =>
+              futureState ? (
+                <Marker
+                  key={`${sat.id}-future`}
+                  coordinate={{
+                    latitude: futureState.latitude,
+                    longitude: futureState.longitude,
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.predictedMarker,
+                      selectedId === sat.id && styles.predictedMarkerSelected,
+                    ]}
+                  />
+                </Marker>
+              ) : null
+            )}
+            {selectedOrbitPoint && (
+              <Marker
+                key="selected-orbit-head"
+                coordinate={selectedOrbitPoint}
+              >
+                <View style={styles.orbitHead} />
+              </Marker>
+            )}
+          </>
         )}
         {validSatellites.map((sat) => {
           const iconSource = getSatelliteImage(sat);
@@ -1837,73 +1910,128 @@ export default function LiveTracking() {
         )}
       </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.popup,
-          {
-            opacity: popupAnim,
-            transform: [
-              {
-                translateY: popupAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [22, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-        pointerEvents={popupOpen ? 'auto' : 'none'}
-      >
-        {currentPopupSatellite ? (
-          <>
-            <View style={styles.popupRadar} />
-            <View style={styles.popupHeader}>
-              <Text style={styles.title}>{currentPopupSatellite.name}</Text>
-              <Text style={styles.statusLabel}>
-                {currentPopupSatellite.isLive ? 'LIVE' : 'SIMULATED'}
+      {activeSatForHUD && (
+        <View style={styles.hudContainer}>
+          <BlurView intensity={75} tint="dark" style={styles.hudBlur}>
+            {/* HUD Header */}
+            <View style={styles.hudHeader}>
+              <View style={styles.hudTitleWrapper}>
+                <MaterialCommunityIcons name="satellite-variant" size={20} color="#00E5FF" style={{ marginRight: 8 }} />
+                <Text style={styles.hudTitle}>{activeSatForHUD.name.toUpperCase()}</Text>
+              </View>
+              <View style={[styles.hudBadge, activeSatForHUD.visibility ? styles.hudBadgeActive : styles.hudBadgeInactive]}>
+                <View style={[styles.hudPulseDot, activeSatForHUD.visibility ? styles.hudPulseDotActive : styles.hudPulseDotInactive]} />
+                <Text style={styles.hudBadgeText}>
+                  {activeSatForHUD.visibility ? 'LOCK_OK' : 'SEARCHING'}
+                </Text>
+              </View>
+            </View>
+
+            {/* HUD Metrics Grid */}
+            <View style={styles.hudGrid}>
+              <View style={styles.hudGridCol}>
+                <Text style={styles.hudGridLabel}>ALTITUDE</Text>
+                <Text style={styles.hudGridValue}>{(activeSatForHUD.altitude || 0).toFixed(0)} KM</Text>
+              </View>
+              <View style={styles.hudGridCol}>
+                <Text style={styles.hudGridLabel}>SPEED</Text>
+                <Text style={styles.hudGridValue}>
+                  {((activeSatForHUD.velocity || 7.7) * 3600).toLocaleString(undefined, { maximumFractionDigits: 0 })} KM/H
+                </Text>
+              </View>
+              <View style={styles.hudGridCol}>
+                <Text style={styles.hudGridLabel}>SIGNAL</Text>
+                <Text style={[styles.hudGridValue, { color: activeSatForHUD.visibility ? '#00FF9D' : '#FFB800' }]}>
+                  {activeSatForHUD.visibility ? 'LOCKED' : 'AWAITING'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.hudDivider} />
+
+            {/* Extra Telemetry Rows */}
+            <View style={styles.hudInfoRow}>
+              <Text style={styles.hudInfoLabel}>LATITUDE / LONGITUDE:</Text>
+              <Text style={styles.hudInfoValue}>
+                {activeSatForHUD.latitude?.toFixed(4)}° / {activeSatForHUD.longitude?.toFixed(4)}°
+              </Text>
+            </View>
+            <View style={styles.hudInfoRow}>
+              <Text style={styles.hudInfoLabel}>VISIBILITY WINDOW:</Text>
+              <Text style={styles.hudInfoValue}>
+                {activeSatForHUD.visibility ? 'Pass Active (In Range)' : 'Awaiting horizon rise'}
               </Text>
             </View>
 
-            <Text style={styles.text}>
-              Lat: {currentPopupSatellite.latitude?.toFixed(4)}
-            </Text>
-            <Text style={styles.text}>
-              Lon: {currentPopupSatellite.longitude?.toFixed(4)}
-            </Text>
-            <Text style={styles.text}>
-              Alt: {currentPopupSatellite.altitude?.toFixed(2)} km
-            </Text>
-            <Text style={styles.text}>
-              Speed: {currentPopupSatellite.velocity?.toFixed(2)} km/s
-            </Text>
-            {currentPopupSatellite.distanceKm != null && (
-              <Text style={styles.text}>
-                Distance: {currentPopupSatellite.distanceKm.toFixed(1)} km
-              </Text>
-            )}
-            <Text style={styles.text}>
-              Visibility:{' '}
-              {currentPopupSatellite.visibility ? 'Visible' : 'Not visible'}
-            </Text>
-            <Text style={styles.text}>
-              Orbit: {currentPopupSatellite.orbitType ?? 'Unknown'}
-            </Text>
-            <Text style={styles.text}>
-              ETA: {alertState.minutesUntilArrival != null ? `${alertState.minutesUntilArrival} min` : 'Approaching'}
-            </Text>
-            <Text style={styles.text}>
-              Direction: {getApproachDirectionName(currentPopupSatellite, userLocationRef.current)}
-            </Text>
-            <Text style={styles.text}>
-              Updated: {currentPopupSatellite.lastUpdated ? new Date(currentPopupSatellite.lastUpdated).toLocaleString() : 'TBD'}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.text}>
-            Tap any satellite marker or card to inspect its live orbit.
-          </Text>
-        )}
-      </Animated.View>
+            <View style={styles.hudDivider} />
+
+            {/* Live Ticker */}
+            <View style={styles.hudTickerRow}>
+              <Text style={styles.hudTickerLabel}>LIVE FLEET FEED // </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                {satellites.filter(s => s.id === 'ISS' || s.id === 'HUBBLE' || s.id === 'GPS' || s.id === 'NOAA').map(sat => (
+                  <Text key={sat.id} style={styles.hudTickerText}>
+                    🛰️ {sat.name.toUpperCase()}: {((sat.velocity || 7.7) * 3600).toFixed(0)} KM/H [Alt: {sat.altitude?.toFixed(0)} KM]  •  
+                  </Text>
+                ))}
+              </ScrollView>
+            </View>
+          </BlurView>
+        </View>
+      )}
+
+      {/* Floating Tactical Control Dock */}
+      <View style={styles.floatingControls}>
+        <TouchableOpacity
+          style={[styles.floatingButton, (followSatellite || followUser) && styles.floatingButtonActive]}
+          onPress={() => {
+            if (selectedId) {
+              setFollowSatellite(prev => !prev);
+              if (!followSatellite) setFollowUser(false);
+            } else {
+              setFollowUser(prev => !prev);
+              setFollowSatellite(false);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.glowingRing}>
+            <MaterialCommunityIcons 
+              name={selectedId ? "crosshairs-gps" : "radar"} 
+              size={22} 
+              color={(followSatellite || followUser) ? COLORS.primary : "#fff"} 
+            />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.floatingButton}
+          onPress={handleTargetSwitch}
+          activeOpacity={0.7}
+        >
+          <View style={styles.glowingRing}>
+            <MaterialCommunityIcons 
+              name="chevron-double-right" 
+              size={22} 
+              color="#fff" 
+            />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.floatingButton, showOrbitVectors && styles.floatingButtonActive]}
+          onPress={() => setShowOrbitVectors(prev => !prev)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.glowingRing}>
+            <MaterialCommunityIcons 
+              name="orbit" 
+              size={22} 
+              color={showOrbitVectors ? COLORS.primary : "#fff"} 
+            />
+          </View>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.historyPanel}>
         <Text style={styles.historyTitle}>Recent Contact</Text>
@@ -1979,6 +2107,170 @@ export default function LiveTracking() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   map: { flex: 1 },
+  hudContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 16,
+    right: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 229, 255, 0.35)',
+    backgroundColor: 'rgba(4, 7, 20, 0.55)',
+    shadowColor: '#00E5FF',
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+    zIndex: 100,
+  },
+  hudBlur: {
+    padding: 16,
+  },
+  hudHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hudTitleWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hudTitle: {
+    fontFamily: FONTS.bold,
+    fontSize: 16,
+    color: '#fff',
+    letterSpacing: 1.5,
+  },
+  hudBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  hudBadgeActive: {
+    backgroundColor: 'rgba(0, 255, 157, 0.1)',
+    borderColor: 'rgba(0, 255, 157, 0.3)',
+  },
+  hudBadgeInactive: {
+    backgroundColor: 'rgba(255, 184, 0, 0.1)',
+    borderColor: 'rgba(255, 184, 0, 0.3)',
+  },
+  hudPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  hudPulseDotActive: {
+    backgroundColor: '#00FF9D',
+  },
+  hudPulseDotInactive: {
+    backgroundColor: '#FFB800',
+  },
+  hudBadgeText: {
+    fontFamily: FONTS.bold,
+    fontSize: 10,
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  hudGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  hudGridCol: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  hudGridLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 9,
+    color: '#8E9AA6',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  hudGridValue: {
+    fontFamily: FONTS.bold,
+    fontSize: 13,
+    color: '#00E5FF',
+  },
+  hudDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginVertical: 10,
+  },
+  hudInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  hudInfoLabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 10,
+    color: '#8E9AA6',
+  },
+  hudInfoValue: {
+    fontFamily: FONTS.bold,
+    fontSize: 10,
+    color: '#fff',
+  },
+  hudTickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  hudTickerLabel: {
+    fontFamily: FONTS.bold,
+    fontSize: 9,
+    color: COLORS.primary,
+  },
+  hudTickerText: {
+    fontFamily: FONTS.regular,
+    fontSize: 9,
+    color: '#fff',
+    marginRight: 15,
+  },
+  floatingControls: {
+    position: 'absolute',
+    right: 16,
+    top: 320,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  floatingButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(4, 7, 20, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  floatingButtonActive: {
+    borderColor: 'rgba(0, 229, 255, 0.5)',
+    shadowColor: '#00E5FF',
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  glowingRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loading: {
     position: 'absolute',
     top: '48%',

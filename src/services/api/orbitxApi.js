@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Platform } from 'react-native';
 
@@ -16,7 +16,7 @@ import { Platform } from 'react-native';
 //     (run start_backend.ps1 as Administrator to fix this automatically)
 //   â€¢ Backend must be started with: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 //
-const MACHINE_IP = '10.165.42.98'; // Auto-set by start_backend.ps1 // â† Your PC's Wi-Fi IPv4 address
+const MACHINE_IP = '10.230.245.98'; // Auto-set by start_backend.ps1 // â†  Your PC's Wi-Fi IPv4 address
 
 // Build base URL: always use MACHINE_IP to ensure real devices connect reliably
 const BASE_URL = `http://${MACHINE_IP}:8000/api/v1`;

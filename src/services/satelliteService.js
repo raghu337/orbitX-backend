@@ -1,6 +1,7 @@
 import * as satellite from 'satellite.js';
+import { BASE_URL } from './api/orbitxApi';
 
-const BACKEND_URL = 'http://10.165.42.98:8000/api/v1';
+const BACKEND_URL = BASE_URL;
 const EARTH_RADIUS_KM = 6371;
 const LIVE_SATELLITE_DECK = [
   { id: 'ISS', name: 'ISS', noradId: 25544, color: '#00E5FF' },

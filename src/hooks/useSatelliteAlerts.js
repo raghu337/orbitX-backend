@@ -194,16 +194,3 @@ export const useSatelliteAlerts = () => {
     fetchPasses,
   };
 };
-    initialize();
-  }, [initialize]);
-
-  return {
-    passes,
-    loading,
-    error,
-    location,
-    notificationsEnabled,
-    toggleNotifications,
-    refresh: () => location && fetchPasses(location.latitude, location.longitude)
-  };
-};

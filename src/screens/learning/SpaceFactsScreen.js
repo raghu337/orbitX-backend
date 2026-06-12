@@ -221,9 +221,11 @@ const SpaceFactsScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
-        </TouchableOpacity>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.titleContainer}>
           <Text style={styles.headerTitle}>Space Assistant</Text>
           <Text style={styles.headerSubtitle}>Ask the cosmos anything</Text>

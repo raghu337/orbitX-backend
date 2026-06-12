@@ -1,20 +1,70 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import {
+    Animated,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TouchableOpacity,
-    View
+    View,
+    Alert
 } from 'react-native';
 import BackgroundGradient from '../../components/BackgroundGradient';
 import SectionHeader from '../../components/dashboard/SectionHeader';
 import NeonButton from '../../components/NeonButton';
-import NotificationSettingsCard from '../../components/settings/NotificationSettingsCard';
+import GlassCard from '../../components/GlassCard';
 import SatelliteProximityAlertCard from '../../components/settings/SatelliteProximityAlertCard';
 import { useAuth } from '../../hooks/useAuth';
 import { useSatelliteAlerts } from '../../hooks/useSatelliteAlerts';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
+import { BASE_URL } from '../../services/api/orbitxApi';
+
+const ManifestRow = ({ icon, title, value, onPress, hasChevron = true, children }) => {
+  const translateAnim = useRef(new Animated.Value(0)).current;
+
+  const handlePressIn = () => {
+    Animated.timing(translateAnim, {
+      toValue: 6,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(translateAnim, {
+      toValue: 0,
+      friction: 4,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onPress}
+      onPressIn={hasChevron ? handlePressIn : undefined}
+      onPressOut={hasChevron ? handlePressOut : undefined}
+      style={styles.settingLink}
+    >
+      <View style={styles.settingLinkLeft}>
+        <View style={styles.rowIconContainer}>
+          <MaterialCommunityIcons name={icon} size={18} color={COLORS.primary} />
+        </View>
+        <Text style={styles.linkText}>{title}</Text>
+      </View>
+      <View style={styles.settingLinkRight}>
+        {value ? <Text style={styles.rowValueText}>{value}</Text> : null}
+        {children}
+        {hasChevron && (
+          <Animated.View style={{ transform: [{ translateX: translateAnim }] }}>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+          </Animated.View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const SettingsScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
@@ -33,6 +83,28 @@ const SettingsScreen = ({ navigation }) => {
     silent: false,
   });
 
+  const [backendConnected, setBackendConnected] = useState(true);
+
+  useEffect(() => {
+    testBackendSync(true);
+  }, []);
+
+  const testBackendSync = async (silent = true) => {
+    try {
+      const response = await fetch(`${BASE_URL.replace('/api/v1', '')}/health`);
+      if (response.ok || response.status === 200 || response.status === 404) {
+        setBackendConnected(true);
+        if (!silent) Alert.alert('📡 Diagnostics Pass', 'Backend connection check successful!');
+      } else {
+        setBackendConnected(false);
+        if (!silent) Alert.alert('⚠️ Diagnostics Fail', 'Backend responded with an error.');
+      }
+    } catch (e) {
+      setBackendConnected(false);
+      if (!silent) Alert.alert('⚠️ Diagnostics Offline', 'Failed to connect to backend.');
+    }
+  };
+
   const toggleSetting = (key) => {
     setSettings(prev => ({
       ...prev,
@@ -42,7 +114,6 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleLogout = async () => {
     await logout();
-    // Navigation will be handled by AppNavigator observing auth state
   };
 
   return (
@@ -50,25 +121,56 @@ const SettingsScreen = ({ navigation }) => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.text} />
-          </TouchableOpacity>
+          {navigation.canGoBack() ? (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
           <Text style={styles.title}>Settings</Text>
           <View style={{ width: 40 }} />
         </View>
 
         {/* Profile Summary */}
         <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            <MaterialCommunityIcons name="account" size={50} color={COLORS.primary} />
+          <View style={styles.avatarGlowOuter}>
+            <View style={styles.avatarGlowInner}>
+              <View style={styles.avatarContainer}>
+                <MaterialCommunityIcons name="astronaut" size={50} color={COLORS.primary} />
+              </View>
+            </View>
             <View style={styles.onlineBadge} />
           </View>
           <Text style={styles.profileName}>{user?.name || 'Explorer'}</Text>
           <Text style={styles.profileEmail}>{user?.email || 'Awaiting command...'}</Text>
         </View>
 
+        {/* Mission Stats Dashboard */}
+        <View style={styles.statsContainer}>
+          <GlassCard style={styles.statsCard}>
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>24</Text>
+              <Text style={styles.statLabel}>SATELLITES</Text>
+              <Text style={styles.statSublabel}>TRACKED</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>85%</Text>
+              <Text style={styles.statLabel}>COGNITIVE</Text>
+              <Text style={styles.statSublabel}>MASTERY</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statColumn}>
+              <Text style={styles.statValue}>CMD PILOT</Text>
+              <Text style={styles.statLabel}>MISSION</Text>
+              <Text style={styles.statSublabel}>RANK</Text>
+            </View>
+          </GlassCard>
+        </View>
+
         {/* Real-Time Alerts */}
-        <SectionHeader title="Real-Time Satellite Alerts" />
+        <SectionHeader title="[ RADAR TELEMETRY // REAL-TIME ALERTS ]" />
         <View style={styles.section}>
           <SatelliteProximityAlertCard
             enabled={proximityAlertsEnabled}
@@ -77,56 +179,83 @@ const SettingsScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Legacy Notification Settings */}
-        <SectionHeader title="Notification Preferences" />
+        {/* 01 // PILOT IDENTIFICATION */}
+        <SectionHeader title="[ 01 // PILOT IDENTIFICATION ]" />
         <View style={styles.section}>
-          <NotificationSettingsCard
-            title="Pass Predictions"
-            description={notificationsEnabled ? 'Enabled - Get alerts for upcoming passes' : 'Get alerted 5 minutes before visible satellite passes.'}
-            icon="satellite-variant"
-            value={notificationsEnabled}
-            onValueChange={toggleNotifications}
-            color={COLORS.primary}
-          />
-          <NotificationSettingsCard
-            title="Daily Space Facts"
-            description="Receive a curated space fact every morning. (Coming soon)"
-            icon="lightbulb-on"
-            value={settings.facts}
-            onValueChange={() => toggleSetting('facts')}
-            color="#FFB800"
-          />
-          <NotificationSettingsCard
-            title="Streak Reminders"
-            description="Remind me to complete my daily quiz. (Coming soon)"
-            icon="fire"
-            value={settings.streak}
-            onValueChange={() => toggleSetting('streak')}
-            color="#FF4B4B"
-          />
-          <NotificationSettingsCard
-            title="Silent Mode"
-            description="Disable all sound and vibration for alerts."
-            icon="bell-off"
-            value={settings.silent}
-            onValueChange={() => toggleSetting('silent')}
-            color="#A5A5A5"
-          />
+          <GlassCard style={styles.glassPanel}>
+            <ManifestRow icon="account" title="Full Name" value={user?.name || 'Explorer'} hasChevron={false} />
+            <ManifestRow icon="email" title="Vessel Email" value={user?.email || 'Awaiting command...'} hasChevron={false} />
+            <ManifestRow icon="shield-account" title="Mission Status" value="ACTIVE DUTY" hasChevron={false} />
+          </GlassCard>
         </View>
 
-        {/* App Settings */}
-        <SectionHeader title="App System" />
+        {/* 02 // COMMS & NOTIFICATIONS */}
+        <SectionHeader title="[ 02 // COMMS & NOTIFICATIONS ]" />
         <View style={styles.section}>
-          <TouchableOpacity style={styles.settingLink}>
-            <MaterialCommunityIcons name="shield-check" size={20} color={COLORS.textSecondary} />
-            <Text style={styles.linkText}>Privacy Policy</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="rgba(255, 255, 255, 0.2)" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingLink}>
-            <MaterialCommunityIcons name="help-circle" size={20} color={COLORS.textSecondary} />
-            <Text style={styles.linkText}>Help Center</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="rgba(255, 255, 255, 0.2)" />
-          </TouchableOpacity>
+          <GlassCard style={styles.glassPanel}>
+            <ManifestRow icon="satellite-variant" title="Pass Predictions" hasChevron={false}>
+              <Switch
+                trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: `${COLORS.primary}40` }}
+                thumbColor={notificationsEnabled ? COLORS.primary : '#f4f3f4'}
+                ios_backgroundColor="rgba(255, 255, 255, 0.1)"
+                onValueChange={toggleNotifications}
+                value={notificationsEnabled}
+              />
+            </ManifestRow>
+            
+            <ManifestRow icon="lightbulb-on" title="Daily Space Facts" hasChevron={false}>
+              <Switch
+                trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: `#FFB80040` }}
+                thumbColor={settings.facts ? '#FFB800' : '#f4f3f4'}
+                ios_backgroundColor="rgba(255, 255, 255, 0.1)"
+                onValueChange={() => toggleSetting('facts')}
+                value={settings.facts}
+              />
+            </ManifestRow>
+
+            <ManifestRow icon="fire" title="Streak Reminders" hasChevron={false}>
+              <Switch
+                trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: `#FF4B4B40` }}
+                thumbColor={settings.streak ? '#FF4B4B' : '#f4f3f4'}
+                ios_backgroundColor="rgba(255, 255, 255, 0.1)"
+                onValueChange={() => toggleSetting('streak')}
+                value={settings.streak}
+              />
+            </ManifestRow>
+
+            <ManifestRow icon="bell-off" title="Silent Mode" hasChevron={false}>
+              <Switch
+                trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: `#A5A5A540` }}
+                thumbColor={settings.silent ? '#A5A5A5' : '#f4f3f4'}
+                ios_backgroundColor="rgba(255, 255, 255, 0.1)"
+                onValueChange={() => toggleSetting('silent')}
+                value={settings.silent}
+              />
+            </ManifestRow>
+          </GlassCard>
+        </View>
+
+        {/* 03 // SECURE PROTOCOLS & DIAGNOSTICS */}
+        <SectionHeader title="[ 03 // DIAGNOSTICS & SYSTEM ]" />
+        <View style={styles.section}>
+          <GlassCard style={styles.glassPanel}>
+            <ManifestRow 
+              icon="shield-check" 
+              title="Privacy Policy" 
+              onPress={() => Alert.alert('Secure Protocol', 'Privacy Policy encrypted and active.')} 
+            />
+            <ManifestRow 
+              icon="help-circle" 
+              title="Help Center" 
+              onPress={() => Alert.alert('Comms Open', 'Help Center channel established.')} 
+            />
+            <ManifestRow 
+              icon="sync" 
+              title="Backend Sync Diagnostics" 
+              value={backendConnected ? 'CONNECTED' : 'OFFLINE'}
+              onPress={() => testBackendSync(false)} 
+            />
+          </GlassCard>
         </View>
 
         <View style={styles.logoutContainer}>
@@ -173,26 +302,47 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: 'center',
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.xl,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  avatarGlowOuter: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 229, 255, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
     marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.3)',
+  },
+  avatarGlowInner: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 0, 157, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarContainer: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(4, 7, 20, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   onlineBadge: {
     position: 'absolute',
-    bottom: 5,
-    right: 5,
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: COLORS.success,
     borderWidth: 2,
     borderColor: COLORS.background,
@@ -208,23 +358,95 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  statsContainer: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.xl,
+  },
+  statsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: 'rgba(4, 7, 20, 0.35)',
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+  },
+  statColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
+    color: '#00E5FF',
+    textShadowColor: 'rgba(0, 229, 255, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  statLabel: {
+    fontFamily: FONTS.bold,
+    fontSize: 9,
+    color: '#8E9AA6',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  statSublabel: {
+    fontFamily: FONTS.regular,
+    fontSize: 8,
+    color: '#8E9AA6',
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    height: 35,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   section: {
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
+  glassPanel: {
+    backgroundColor: 'rgba(4, 7, 20, 0.35)',
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+    padding: SPACING.xs,
+  },
   settingLink: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
-  linkText: {
+  settingLinkLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
+  },
+  rowIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 229, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  linkText: {
     fontFamily: FONTS.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.text,
-    marginLeft: SPACING.md,
+  },
+  settingLinkRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rowValueText: {
+    fontFamily: FONTS.bold,
+    fontSize: 12,
+    color: '#00E5FF',
+    marginRight: 8,
   },
   logoutContainer: {
     paddingHorizontal: SPACING.lg,

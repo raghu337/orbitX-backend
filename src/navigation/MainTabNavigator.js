@@ -1,22 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeNavigator from './HomeNavigator';
-import TrackingNavigator from './TrackingNavigator';
-import LearningNavigator from './LearningNavigator';
-import QuizNavigator from './QuizNavigator';
-import BottomTabBar from './BottomTabBar';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import ModuleErrorBoundary from '../components/common/ModuleErrorBoundary';
+import AIAssistantScreen from '../screens/ai/AIAssistantScreen';
+import SpaceFactsScreen from '../screens/learning/SpaceFactsScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 import { COLORS, FONTS } from '../theme/theme';
+import BottomTabBar from './BottomTabBar';
+import HomeNavigator from './HomeNavigator';
+import LearningNavigator from './LearningNavigator';
+import TrackingNavigator from './TrackingNavigator';
 
 const Tab = createBottomTabNavigator();
-
-const PlaceholderScreen = ({ route }) => (
-  <View style={styles.placeholderContainer}>
-    <Text style={styles.placeholderText}>{route.name} Module</Text>
-    <Text style={styles.placeholderSubText}>Temporarily disabled for stabilization</Text>
-  </View>
-);
 
 const SafeScreen = ({ component: Component, moduleName }) => {
   const WrappedComponent = (props) => (
@@ -30,8 +25,10 @@ const SafeScreen = ({ component: Component, moduleName }) => {
 
 const SafeHome = SafeScreen({ component: HomeNavigator, moduleName: 'Home Dashboard' });
 const SafeTracker = SafeScreen({ component: TrackingNavigator, moduleName: 'Satellite Tracker' });
-const SafeLearn = SafeScreen({ component: LearningNavigator, moduleName: 'Space Learning' });
-const SafeQuiz = SafeScreen({ component: QuizNavigator, moduleName: 'Quiz Zone' });
+const SafeExplorer = SafeScreen({ component: LearningNavigator, moduleName: 'Planet Explorer' });
+const SafeFacts = SafeScreen({ component: SpaceFactsScreen, moduleName: 'Space Facts' });
+const SafeChat = SafeScreen({ component: AIAssistantScreen, moduleName: 'AI Space Chatbot' });
+const SafeProfile = SafeScreen({ component: SettingsScreen, moduleName: 'User Profile' });
 
 const MainTabNavigator = () => {
   return (
@@ -43,8 +40,10 @@ const MainTabNavigator = () => {
     >
       <Tab.Screen name="Home" component={SafeHome} />
       <Tab.Screen name="Tracker" component={SafeTracker} />
-      <Tab.Screen name="Learn" component={SafeLearn} />
-      <Tab.Screen name="Quiz" component={SafeQuiz} />
+      <Tab.Screen name="Explorer" component={SafeExplorer} />
+      <Tab.Screen name="Facts" component={SafeFacts} />
+      <Tab.Screen name="Chat" component={SafeChat} />
+      <Tab.Screen name="Profile" component={SafeProfile} />
     </Tab.Navigator>
   );
 };

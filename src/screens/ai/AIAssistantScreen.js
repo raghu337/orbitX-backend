@@ -175,9 +175,11 @@ const AIAssistantScreen = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="chevron-left" size={32} color={COLORS.text} />
-            </TouchableOpacity>
+            {navigation.canGoBack() ? (
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.7}>
+                <MaterialCommunityIcons name="chevron-left" size={32} color={COLORS.text} />
+              </TouchableOpacity>
+            ) : null}
             <View style={styles.robotHeaderIcon}>
               <MaterialCommunityIcons name="robot-outline" size={22} color={COLORS.primary} />
               <View style={styles.statusDot} />
