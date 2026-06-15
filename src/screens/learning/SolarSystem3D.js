@@ -192,8 +192,33 @@ const SOLAR_SYSTEM = [
 const SolarSystem3D = ({ navigation }) => {
   const isFocused = useIsFocused();
   
+  const currentDay = useMemo(() => new Date().getDate(), []);
+
+  // Refs for procedural light cycle modulation
+  const sunMaterialRef = useRef();
+  const ambientLightRef = useRef();
+  const directionalLightRef = useRef();
+
+  // Compute a unique day-based randomizer seed for starting orbital positions and solar cycle
+  const dynamicSolarSystem = useMemo(() => {
+    return SOLAR_SYSTEM.map((planet) => {
+      if (planet.id === 'sun') return planet;
+      // Calculate a unique starting angular radian position based on calendar day
+      const initialAngle = (currentDay * 360) / 31; 
+      return {
+        ...planet,
+        initialAngle: (planet.initialAngle || 0) + initialAngle,
+      };
+    });
+  }, [currentDay]);
+
+  const dynamicSunIntensity = useMemo(() => {
+    // Adjust the base intensity of the Sun's light emission matrix (emissiveIntensity) to mimic changing solar cycles
+    return 2.0 + Math.sin(currentDay) * 0.5;
+  }, [currentDay]);
+
   // Set Mars as default target locked planet
-  const [selectedPlanet, setSelectedPlanet] = useState(SOLAR_SYSTEM[4]);
+  const [selectedPlanet, setSelectedPlanet] = useState(dynamicSolarSystem[4]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
   const [scannedPlanets, setScannedPlanets] = useState({ mars: true });
@@ -296,7 +321,7 @@ const SolarSystem3D = ({ navigation }) => {
     }, 80);
   };
 
-  const visiblePlanets = useMemo(() => SOLAR_SYSTEM.filter((planet) => planet.id !== 'sun'), []);
+  const visiblePlanets = useMemo(() => dynamicSolarSystem.filter((planet) => planet.id !== 'sun'), [dynamicSolarSystem]);
 
   // Compute indicator line path data
   const indicatorLinePath = useMemo(() => {
@@ -325,7 +350,7 @@ const SolarSystem3D = ({ navigation }) => {
         {/* Telemetry Markers */}
         <Text style={[styles.hudMarkerText, { top: 92, left: 20 }]}>[SYS-HUD: 3D]</Text>
         <Text style={[styles.hudMarkerText, { top: 92, right: 20 }]}>GRID: TACTICAL</Text>
-        <Text style={[styles.hudMarkerText, { bottom: 100, right: 20 }]}>
+        <Text style={[styles.hudMarkerText, { bottom: 15, right: 20 }]}>
           PROBE LOCK: {selectedPlanet ? selectedPlanet.name.toUpperCase() : 'NONE'}
         </Text>
       </View>
@@ -346,6 +371,11 @@ const SolarSystem3D = ({ navigation }) => {
             <Text style={styles.hudTelemetryLine}>LINK: <Text style={styles.hudTelemetryVal}>ACTIVE</Text></Text>
           </View>
         </BlurView>
+
+        {/* Telemetry Banner Row */}
+        <View style={styles.telemetryBannerRow}>
+          <Text style={styles.telemetryBannerText}>COSMIC CLOCK: SYNCHRONIZED | CYCLE DATA: DYNAMIC</Text>
+        </View>
       </SafeAreaView>
 
       {/* 3D Canvas Viewport */}
@@ -359,7 +389,8 @@ const SolarSystem3D = ({ navigation }) => {
                 camera={{ position: [0, 22, 55], fov: 60 }}
               >
                 <fog attach="fog" args={['#040714', 25, 140]} />
-                <ambientLight intensity={0.25} />
+                <ambientLight ref={ambientLightRef} intensity={0.25} />
+                <directionalLight ref={directionalLightRef} intensity={0.5} position={[5, 10, 5]} />
 
                 {/* Starry space background */}
                 <SpaceBackground starCount={340} />
@@ -367,7 +398,12 @@ const SolarSystem3D = ({ navigation }) => {
                 {/* Center Sun mesh with emissive material */}
                 <mesh position={[0, 0, 0]}>
                   <sphereGeometry args={[2.5, 64, 64]} />
-                  <meshStandardMaterial color="#FFFFFF" emissive="#FF9D00" emissiveIntensity={3.5} />
+                  <meshStandardMaterial
+                    ref={sunMaterialRef}
+                    color="#FFFFFF"
+                    emissive="#FF9D00"
+                    emissiveIntensity={dynamicSunIntensity}
+                  />
                   <pointLight
                     castShadow
                     intensity={3.2}
@@ -426,6 +462,10 @@ const SolarSystem3D = ({ navigation }) => {
                   selectedPlanet={selectedPlanet}
                   planetPositionsRef={planetPositions}
                   onMarsProject={setMarsScreenPos}
+                  sunMaterialRef={sunMaterialRef}
+                  ambientLightRef={ambientLightRef}
+                  directionalLightRef={directionalLightRef}
+                  currentDay={currentDay}
                 />
               </Canvas>
             )}
@@ -613,6 +653,10 @@ const SolarSystem3D = ({ navigation }) => {
               <Text style={styles.sourceLabel}>DATA SOURCE:</Text>
               <Text style={styles.sourceValue}>ORBITX HELIOCORE ENHANCED</Text>
             </View>
+            <View style={[styles.sourceFooter, { borderTopWidth: 0, marginTop: 2 }]}>
+              <Text style={styles.sourceLabel}>COSMIC CYCLE STATUS:</Text>
+              <Text style={[styles.sourceValue, { color: '#00FF9D' }]}>SYNCHRONIZED</Text>
+            </View>
           </BlurView>
         </View>
       )}
@@ -624,7 +668,7 @@ const SolarSystem3D = ({ navigation }) => {
             <Text style={styles.systemCoreTitle}>HELIOCENTRIC CORE TELEMETRY</Text>
             <Text style={styles.systemCoreSubtitle}>SELECT A CELESTIAL BODY IN VIEWPORT OR CONSOLE LIST</Text>
             <View style={styles.quickSelector}>
-              {SOLAR_SYSTEM.filter(p => p.id !== 'sun').map((p) => (
+              {dynamicSolarSystem.filter(p => p.id !== 'sun').map((p) => (
                 <TouchableOpacity
                    key={p.id}
                    style={[styles.quickSelectBtn, { borderColor: p.color + '40' }]}
@@ -635,6 +679,10 @@ const SolarSystem3D = ({ navigation }) => {
                   </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+            <View style={[styles.sourceFooter, { borderTopWidth: 1, marginTop: 8 }]}>
+              <Text style={styles.sourceLabel}>COSMIC CYCLE STATUS:</Text>
+              <Text style={[styles.sourceValue, { color: '#00FF9D' }]}>SYNCHRONIZED</Text>
             </View>
           </BlurView>
         </View>
@@ -665,7 +713,7 @@ const SolarSystem3D = ({ navigation }) => {
             {/* Tab 3: Explorer (Active) */}
             <TouchableOpacity 
               style={styles.tabItemActive}
-              onPress={() => handlePlanetSelect(SOLAR_SYSTEM[4])} // Lock Mars
+              onPress={() => handlePlanetSelect(dynamicSolarSystem[4])} // Lock Mars
             >
               <View style={styles.activeIconWrapper}>
                 <MaterialCommunityIcons name="earth" size={22} color={COLORS.primary} />
@@ -707,7 +755,18 @@ const SolarSystem3D = ({ navigation }) => {
   );
 };
 
-const CameraController = ({ rotationRef, zoomRef, targetLookAt, selectedPlanet, planetPositionsRef, onMarsProject }) => {
+const CameraController = ({
+  rotationRef,
+  zoomRef,
+  targetLookAt,
+  selectedPlanet,
+  planetPositionsRef,
+  onMarsProject,
+  sunMaterialRef,
+  ambientLightRef,
+  directionalLightRef,
+  currentDay,
+}) => {
   const { camera, size } = useThree();
   const currentLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const currentZoom = useRef(55);
@@ -715,6 +774,22 @@ const CameraController = ({ rotationRef, zoomRef, targetLookAt, selectedPlanet, 
 
   useFrame((state) => {
     if (!camera) return;
+
+    // Procedural solar cycle modulation inside the useFrame loop
+    if (state && state.clock) {
+      const time = state.clock.getElapsedTime();
+      const modulation = Math.sin(time * 0.5 + currentDay) * 0.15;
+
+      if (sunMaterialRef && sunMaterialRef.current) {
+        sunMaterialRef.current.emissiveIntensity = (2.0 + Math.sin(currentDay) * 0.5) + modulation * 2.0;
+      }
+      if (ambientLightRef && ambientLightRef.current) {
+        ambientLightRef.current.intensity = 0.25 + modulation;
+      }
+      if (directionalLightRef && directionalLightRef.current) {
+        directionalLightRef.current.intensity = 0.5 + modulation;
+      }
+    }
 
     let targetX = 0;
     let targetY = 0;
@@ -786,10 +861,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#040714',
   },
   outerBorderFrame: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    bottom: 95, // Cleanly terminates above the bottom navigation bar (range 15-80)
     borderWidth: 1.5,
     borderColor: 'rgba(0, 229, 255, 0.22)',
-    margin: 10,
     zIndex: 10,
     borderRadius: 18,
   },
@@ -841,6 +919,25 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 15,
+  },
+  telemetryBannerRow: {
+    marginTop: 8,
+    backgroundColor: 'rgba(0, 229, 255, 0.08)',
+    borderColor: 'rgba(0, 229, 255, 0.25)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  telemetryBannerText: {
+    color: '#00E5FF',
+    fontSize: 8,
+    fontFamily: FONTS.bold || 'System',
+    fontWeight: 'bold',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   topHudHeader: {
     flexDirection: 'row',
@@ -906,9 +1003,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   canvasWrapper: {
-    width: '100%',
-    height: '100%',
     position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   canvas: {
     width: '100%',

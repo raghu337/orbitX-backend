@@ -23,11 +23,15 @@ TaskManager.defineTask(SATELLITE_CHECK_TASK, async () => {
     let lat = 13.0827, lng = 80.2707; // Fallback to Chennai
     
     if (status === 'granted') {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      lat = location.coords.latitude;
-      lng = location.coords.longitude;
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lat = location.coords.latitude;
+        lng = location.coords.longitude;
+      } catch (locErr) {
+        console.warn('[Background Task] Failed to obtain location, using fallback:', locErr);
+      }
     }
 
     // 2. Check if proximity alerts are enabled

@@ -143,7 +143,7 @@ const HomeScreen = ({ navigation }) => {
                 activeOpacity={0.8}
               >
                 <View style={[styles.gridIconFrame, { backgroundColor: 'rgba(255, 0, 229, 0.08)' }]}>
-                  <MaterialCommunityIcons name="planet" size={24} color={COLORS.accent} />
+                  <MaterialCommunityIcons name="earth" size={24} color={COLORS.accent} />
                 </View>
                 <Text style={styles.gridCardTitle}>Planet Explorer</Text>
                 <Text style={styles.gridCardDesc}>3D interactive solar system</Text>

@@ -137,7 +137,7 @@ const SettingsScreen = ({ navigation }) => {
           <View style={styles.avatarGlowOuter}>
             <View style={styles.avatarGlowInner}>
               <View style={styles.avatarContainer}>
-                <MaterialCommunityIcons name="astronaut" size={50} color={COLORS.primary} />
+                <MaterialCommunityIcons name="account" size={50} color={COLORS.primary} />
               </View>
             </View>
             <View style={styles.onlineBadge} />

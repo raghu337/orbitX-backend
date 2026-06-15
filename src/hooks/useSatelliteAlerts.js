@@ -47,15 +47,20 @@ export const useSatelliteAlerts = () => {
       let lat = 13.0827, lng = 80.2707; // Chennai fallback
       
       if (status === 'granted') {
-        const currentLoc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
-          maximumAge: 0,
-          timeout: 15000,
-          enableHighAccuracy: true,
-        });
-        lat = currentLoc.coords.latitude;
-        lng = currentLoc.coords.longitude;
-        setLocation(currentLoc.coords);
+        try {
+          const currentLoc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+            maximumAge: 0,
+            timeout: 15000,
+            enableHighAccuracy: true,
+          });
+          lat = currentLoc.coords.latitude;
+          lng = currentLoc.coords.longitude;
+          setLocation(currentLoc.coords);
+        } catch (locErr) {
+          console.warn('[Alerts Hook] Failed to obtain current location (e.g. GPS disabled), using fallback:', locErr);
+          setError('Location services are currently disabled. Using fallback location.');
+        }
       } else {
         setError('Location permission denied. Satellite alerts cannot refresh without GPS access.');
       }

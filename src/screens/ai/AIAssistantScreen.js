@@ -98,6 +98,7 @@ const AIAssistantScreen = ({ navigation }) => {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [errorState, setErrorState] = useState(null); // { message: string, lastAttemptedText: string }
+  const [isOffline, setIsOffline] = useState(GroqChatService.isOfflineMode());
   const scrollRef = useRef(null);
 
   // Send a message (can override text for retry or quick chips)
@@ -124,6 +125,8 @@ const AIAssistantScreen = ({ navigation }) => {
         text: result.response,
       };
       setMessages((prev) => [...prev, tutorMsg]);
+      // Sync the offline state after response succeeds
+      setIsOffline(GroqChatService.isOfflineMode());
     } catch (error) {
       console.warn(`[AIAssistantScreen] Message send failed:`, error);
       setErrorState({
@@ -147,6 +150,8 @@ const AIAssistantScreen = ({ navigation }) => {
   // Clear conversation state
   const handleClear = () => {
     GroqChatService.clearHistory();
+    GroqChatService.setForceOffline(false);
+    setIsOffline(GroqChatService.isOfflineMode());
     setErrorState(null);
     setMessages([
       {
@@ -182,10 +187,13 @@ const AIAssistantScreen = ({ navigation }) => {
             ) : null}
             <View style={styles.robotHeaderIcon}>
               <MaterialCommunityIcons name="robot-outline" size={22} color={COLORS.primary} />
-              <View style={styles.statusDot} />
+              <View style={[styles.statusDot, { backgroundColor: isOffline ? COLORS.warning : COLORS.success }]} />
             </View>
             <View style={styles.headerTitleContainer}>
               <Text style={styles.headerTitle}>AI Space Tutor</Text>
+              <Text style={styles.headerSubtitle}>
+                {isOffline ? 'Offline Simulation Mode' : 'Cosmic Feed Active'}
+              </Text>
             </View>
           </View>
           <TouchableOpacity onPress={handleClear} style={styles.clearButton} activeOpacity={0.7}>
@@ -273,10 +281,26 @@ const AIAssistantScreen = ({ navigation }) => {
                   <Text style={styles.errorTitle}>Connection Interrupted</Text>
                 </View>
                 <Text style={styles.errorText}>{errorState.message}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.7}>
-                  <MaterialCommunityIcons name="refresh" size={16} color={COLORS.background} style={{ marginRight: 6 }} />
-                  <Text style={styles.retryButtonText}>Retry Directive</Text>
-                </TouchableOpacity>
+                
+                <View style={styles.errorActions}>
+                  <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.7}>
+                    <MaterialCommunityIcons name="refresh" size={16} color={COLORS.background} style={{ marginRight: 6 }} />
+                    <Text style={styles.retryButtonText}>Retry Directive</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.retryButton, styles.offlineFallbackButton]} 
+                    onPress={() => {
+                      GroqChatService.setForceOffline(true);
+                      setIsOffline(true);
+                      handleRetry();
+                    }} 
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons name="wifi-off" size={16} color={COLORS.text} style={{ marginRight: 6 }} />
+                    <Text style={styles.offlineFallbackButtonText}>Activate Offline Tutor</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </ScrollView>
@@ -400,7 +424,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   chatContainer: { flex: 1 },
-  chatContent: { padding: SPACING.md, paddingBottom: 30 },
+  chatContent: { padding: SPACING.md, paddingBottom: 160 },
   messageWrapper: {
     flexDirection: 'row',
     marginBottom: SPACING.md,
@@ -496,12 +520,27 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: SPACING.md,
   },
-  retryButton: {
+  headerSubtitle: {
+    fontFamily: FONTS.regular,
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  errorActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+  },
+  retryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
     borderRadius: 12,
   },
   retryButtonText: {
@@ -510,10 +549,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.5,
   },
+  offlineFallbackButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  offlineFallbackButtonText: {
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    fontSize: 13,
+    letterSpacing: 0.5,
+  },
   inputContainer: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xs,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingBottom: Platform.OS === 'ios' ? 98 : 88, // Lifted above the bottom tab bar (80px)
     backgroundColor: 'transparent',
   },
   inputWrapper: {

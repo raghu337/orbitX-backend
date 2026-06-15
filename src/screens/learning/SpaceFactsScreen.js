@@ -58,14 +58,25 @@ const SpaceFactsScreen = ({ navigation }) => {
   }, [messages]);
 
   const refreshConnectionStatus = async () => {
-    const status = await SpaceAIService.checkConnection();
-    setConnectionOnline(status.online);
-    setConnectionStatus(status.online ? 'AI Online' : 'AI Offline');
-    setConnectionMessage(status.message);
-    setConnectionBaseUrl(status.details?.baseUrl || 'Not configured');
-    setConnectionEnvironment(status.details?.environment || 'Unknown');
-    setConnectionNetworkStatus(status.details?.networkStatus || 'Unknown');
-    setConnectionResult(status.connectionResult || 'Unknown');
+    try {
+      const status = await SpaceAIService.checkConnection();
+      setConnectionOnline(status?.online || false);
+      setConnectionStatus(status?.online ? 'AI Online' : 'AI Offline');
+      setConnectionMessage(status?.message || '');
+      setConnectionBaseUrl(status?.details?.baseUrl || 'Not configured');
+      setConnectionEnvironment(status?.details?.environment || 'Unknown');
+      setConnectionNetworkStatus(status?.details?.networkStatus || 'Unknown');
+      setConnectionResult(status?.connectionResult || 'Unknown');
+    } catch (err) {
+      console.warn('refreshConnectionStatus error:', err.message);
+      setConnectionOnline(false);
+      setConnectionStatus('AI Offline');
+      setConnectionMessage(err.message || 'Connection check failed');
+      setConnectionBaseUrl(SpaceAIService.getComputedBaseUrl() || 'Not configured');
+      setConnectionEnvironment(SpaceAIService.getEnvironmentLabel() || 'Unknown');
+      setConnectionNetworkStatus(SpaceAIService.getNetworkStatus() || 'Unknown');
+      setConnectionResult('Error');
+    }
   };
 
   useEffect(() => {
@@ -367,7 +378,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
   },
   chatContent: {
-    paddingBottom: 16,
+    paddingBottom: 160,
     paddingTop: 8,
   },
   messageBlock: {
@@ -391,7 +402,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   inputContainer: {
-    padding: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.sm,
+    paddingBottom: Platform.OS === 'ios' ? 98 : 88, // Lifted above bottom tab bar (80px)
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },

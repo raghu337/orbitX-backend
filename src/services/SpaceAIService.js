@@ -1,39 +1,15 @@
-﻿import Constants from 'expo-constants';
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { BASE_URL } from './api/orbitxApi';
 
-const DEFAULT_OLLAMA_PORT = 11434;
-const DEFAULT_MODEL = 'qwen2.5-coder:latest';
 const DEFAULT_CHECK_TIMEOUT_MS = 7000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 25000;
-const DEFAULT_RETRY_COUNT = 2;
-const RETRY_DELAY_MS = 700;
-const MODEL_CHECK_CACHE_MS = 60 * 1000;
 const LOG_PREFIX = '[SpaceAIService]';
 
 class SpaceAIService {
   constructor() {
-    this.model = DEFAULT_MODEL;
     this.conversationHistory = [];
-    this.modelVerified = false;
-    this.lastModelCheck = 0;
-    this.baseUrlOverride = this.getConfiguredBaseUrl();
-  }
-
-  getConfiguredBaseUrl() {
-    const configUrl =
-      Constants.expoConfig?.extra?.OLLAMA_BASE_URL ??
-      Constants.manifest?.extra?.OLLAMA_BASE_URL;
-
-    if (typeof configUrl === 'string' && configUrl.trim().length > 0) {
-      return configUrl.trim();
-    }
-
-    if (typeof process !== 'undefined' && typeof process.env?.OLLAMA_BASE_URL === 'string' && process.env.OLLAMA_BASE_URL.trim()) {
-      return process.env.OLLAMA_BASE_URL.trim();
-    }
-
-    return null;
   }
 
   getNetworkStatus() {
@@ -44,70 +20,29 @@ class SpaceAIService {
   }
 
   getEnvironmentLabel() {
-    if (Platform.OS === 'web') {
-      return 'Web';
+    try {
+      if (Platform.OS === 'web') {
+        return 'Web';
+      }
+      const appOwnership = Constants?.appOwnership || Constants?.expoConfig?.extra?.appOwnership;
+      if (appOwnership === 'expo') {
+        return 'Expo Go';
+      }
+      const isDevice = Device ? Device.isDevice : false;
+      if (Platform.OS === 'android') {
+        return isDevice ? 'Physical Android Device' : 'Android Emulator';
+      }
+      if (Platform.OS === 'ios') {
+        return isDevice ? 'Physical iOS Device' : 'iOS Simulator';
+      }
+      return 'Native Device';
+    } catch {
+      return 'Unknown Device';
     }
-    if (Constants.appOwnership === 'expo') {
-      return 'Expo Go';
-    }
-    if (Platform.OS === 'android' && !Device.isDevice) {
-      return 'Android Emulator';
-    }
-    if (Platform.OS === 'android' && Device.isDevice) {
-      return 'Physical Android Device';
-    }
-    if (Platform.OS === 'ios' && !Device.isDevice) {
-      return 'iOS Simulator';
-    }
-    return 'Native Device';
-  }
-
-  getDebugHostname() {
-    const rawHost =
-      Constants.manifest?.debuggerHost ||
-      Constants.expoConfig?.hostUri ||
-      Constants.manifest2?.debuggerHost ||
-      '';
-
-    if (!rawHost || typeof rawHost !== 'string') {
-      return null;
-    }
-
-    const ipMatch = rawHost.match(/(\d+\.\d+\.\d+\.\d+)/);
-    if (ipMatch) {
-      return ipMatch[1];
-    }
-
-    const [hostPart] = rawHost.split(':');
-    return hostPart || null;
   }
 
   getComputedBaseUrl() {
-    if (this.baseUrlOverride) {
-      const cleaned = this.baseUrlOverride.replace(/\/+$/, '');
-      console.log(`${LOG_PREFIX} Using configured OLLAMA_BASE_URL: ${cleaned}`);
-      return cleaned;
-    }
-
-    if (Platform.OS === 'web') {
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      return `http://${hostname}:${DEFAULT_OLLAMA_PORT}`;
-    }
-
-    const debugHost = this.getDebugHostname();
-    if (debugHost && debugHost !== 'localhost' && debugHost !== '127.0.0.1') {
-      return `http://${debugHost}:${DEFAULT_OLLAMA_PORT}`;
-    }
-
-    if (Platform.OS === 'android' && !Device.isDevice) {
-      return `http://10.0.2.2:${DEFAULT_OLLAMA_PORT}`;
-    }
-
-    if (Platform.OS === 'android' && Device.isDevice) {
-      return null;
-    }
-
-    return `http://localhost:${DEFAULT_OLLAMA_PORT}`;
+    return BASE_URL;
   }
 
   async timedFetch(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
@@ -132,127 +67,6 @@ class SpaceAIService {
     return Promise.race([fetch(url, mergedOptions), timeoutPromise]);
   }
 
-  async retryAsync(fn, attempts = DEFAULT_RETRY_COUNT, delayMs = RETRY_DELAY_MS) {
-    let lastError = null;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error;
-        const message = error?.message || 'Unknown error';
-        const retryable = this.isRetryableError(error);
-        console.warn(`${LOG_PREFIX} Retry ${attempt} failed: ${message}`);
-        if (!retryable || attempt === attempts) {
-          throw error;
-        }
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-    throw lastError;
-  }
-
-  isRetryableError(error) {
-    if (!error || typeof error.message !== 'string') {
-      return false;
-    }
-    const message = error.message.toLowerCase();
-    return (
-      message.includes('timed out') ||
-      message.includes('network request failed') ||
-      message.includes('failed to fetch') ||
-      message.includes('network error') ||
-      message.includes('connection refused')
-    );
-  }
-
-  async fetchJson(url, options = {}, timeoutMs = DEFAULT_CHECK_TIMEOUT_MS) {
-    const response = await this.timedFetch(url, options, timeoutMs);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText || 'Unknown Ollama error');
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    return response.json();
-  }
-
-  extractTextFromOllamaResponse(data) {
-    if (!data) {
-      return null;
-    }
-
-    if (typeof data.response === 'string' && data.response.trim().length > 0) {
-      return data.response.trim();
-    }
-
-    if (typeof data.text === 'string' && data.text.trim().length > 0) {
-      return data.text.trim();
-    }
-
-    if (Array.isArray(data.content)) {
-      const text = data.content
-        .filter((item) => item?.type === 'output_text' || typeof item?.text === 'string')
-        .map((item) => item.text || '')
-        .join('')
-        .trim();
-      if (text.length > 0) {
-        return text;
-      }
-    }
-
-    if (Array.isArray(data.results)) {
-      const text = data.results
-        .flatMap((result) => result?.content ?? [])
-        .filter((item) => typeof item?.text === 'string')
-        .map((item) => item.text)
-        .join('')
-        .trim();
-      if (text.length > 0) {
-        return text;
-      }
-    }
-
-    return null;
-  }
-
-  async checkHealth(baseUrl) {
-    const tagsUrl = `${baseUrl}/api/tags`;
-    console.log(`${LOG_PREFIX} Checking Ollama health at ${tagsUrl}`);
-    const data = await this.fetchJson(tagsUrl, { method: 'GET' }, DEFAULT_CHECK_TIMEOUT_MS);
-    if (!Array.isArray(data)) {
-      throw new Error('Unexpected /api/tags response.');
-    }
-    return data;
-  }
-
-  async verifyModelInstalled(baseUrl) {
-    const now = Date.now();
-    if (this.modelVerified && now - this.lastModelCheck < MODEL_CHECK_CACHE_MS) {
-      return true;
-    }
-
-    const modelsUrl = `${baseUrl}/api/models`;
-    console.log(`${LOG_PREFIX} Verifying model availability at ${modelsUrl}`);
-    const models = await this.fetchJson(modelsUrl, { method: 'GET' }, DEFAULT_CHECK_TIMEOUT_MS);
-
-    const modelNames = Array.isArray(models)
-      ? models.map((item) => String(item?.name || item?.id || '').toLowerCase())
-      : [];
-    const target = this.model.toLowerCase();
-    const modelFound = modelNames.some(
-      (name) => name === target || name.startsWith(target) || target.startsWith(name)
-    );
-
-    if (!modelFound) {
-      console.warn(`${LOG_PREFIX} Ollama model not found. Available models: ${JSON.stringify(modelNames)}`);
-      throw new Error(`Ollama is reachable, but model "${this.model}" is not installed.`);
-    }
-
-    this.modelVerified = true;
-    this.lastModelCheck = now;
-    return true;
-  }
-
   async checkConnection() {
     const environment = this.getEnvironmentLabel();
     const networkStatus = this.getNetworkStatus();
@@ -263,22 +77,18 @@ class SpaceAIService {
       baseUrl,
     };
 
-    if (!baseUrl) {
-      const message = `Unable to resolve Ollama host for ${environment}. Set OLLAMA_BASE_URL in app.json extra with your Windows host LAN IP.`;
-      console.warn(`${LOG_PREFIX} ${message}`, details);
-      return {
-        online: false,
-        message,
-        details,
-        connectionResult: 'Base URL missing',
-      };
-    }
-
     try {
-      await this.retryAsync(() => this.checkHealth(baseUrl), DEFAULT_RETRY_COUNT);
-      await this.retryAsync(() => this.verifyModelInstalled(baseUrl), DEFAULT_RETRY_COUNT);
-      const message = `Ollama is online at ${baseUrl}`;
-      console.log(`${LOG_PREFIX} ${message}`, details);
+      // Ping FastAPI backend health endpoint
+      const healthUrl = `${baseUrl.replace('/api/v1', '')}/health`;
+      console.log(`${LOG_PREFIX} Pinging health endpoint: ${healthUrl}`);
+      
+      const response = await this.timedFetch(healthUrl, { method: 'GET' }, DEFAULT_CHECK_TIMEOUT_MS);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const message = `Space AI is online at ${baseUrl}`;
+      console.log(`${LOG_PREFIX} ${message}`);
       return {
         online: true,
         message,
@@ -286,63 +96,15 @@ class SpaceAIService {
         connectionResult: 'AI Online',
       };
     } catch (error) {
-      const message = `Ollama connection failed at ${baseUrl}: ${error.message}`;
-      console.warn(`${LOG_PREFIX} ${message}`, details);
+      const message = `Space AI connection failed at ${baseUrl}: ${error.message}`;
+      console.warn(`${LOG_PREFIX} ${message}`);
       return {
         online: false,
         message,
         details,
-        connectionResult: error.message.includes('model') ? 'Model not found' : 'AI Offline',
+        connectionResult: 'AI Offline',
       };
     }
-  }
-
-  async generateResponseWithOllama(prompt) {
-    const baseUrl = this.getComputedBaseUrl();
-    if (!baseUrl) {
-      throw new Error('Unable to resolve Ollama base URL before sending the request.');
-    }
-
-    const generateUrl = `${baseUrl}/api/generate`;
-    console.log(`${LOG_PREFIX} Sending generate request to ${generateUrl}`);
-
-    const response = await this.retryAsync(async () => {
-      const res = await this.timedFetch(
-        generateUrl,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: this.model,
-            prompt,
-            stream: false,
-            temperature: 0.7,
-            top_p: 0.9,
-          }),
-        },
-        DEFAULT_REQUEST_TIMEOUT_MS
-      );
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => res.statusText || 'Unknown Ollama error');
-        throw new Error(`HTTP ${res.status}: ${errorText}`);
-      }
-      return res;
-    });
-
-    const data = await response.json();
-    const text = this.extractTextFromOllamaResponse(data);
-    if (!text) {
-      console.warn(`${LOG_PREFIX} Ollama generate returned unexpected payload.`, data);
-      throw new Error('Ollama did not return a readable response.');
-    }
-
-    return text;
-  }
-
-  buildSystemPrompt() {
-    return `You are an expert Space Assistant AI for OrbitX. Answer space-related user questions in a clear, friendly, and accurate way. Focus on planets, moons, stars, galaxies, black holes, the ISS, NASA missions, and space exploration. Keep responses concise and engaging.`;
   }
 
   async sendMessage(userMessage) {
@@ -353,26 +115,127 @@ class SpaceAIService {
 
     const status = await this.checkConnection();
     if (!status.online) {
-      throw new Error(status.message);
+      console.log(`${LOG_PREFIX} Connection offline. Returning mock response.`);
+      await new Promise((resolve) => setTimeout(resolve, 800)); // Simulate realistic network delay
+      
+      const mockReply = this.getMockResponse(trimmedMessage);
+      this.conversationHistory.push({ role: 'user', content: trimmedMessage });
+      this.conversationHistory.push({ role: 'assistant', content: mockReply.response });
+      
+      return {
+        success: true,
+        response: mockReply.response,
+      };
     }
 
     this.conversationHistory.push({ role: 'user', content: trimmedMessage });
-    const conversationContext = this.conversationHistory
-      .slice(-6)
-      .map((msg) => `${msg.role}: ${msg.content}`)
-      .join('\n');
+    const historySlice = this.conversationHistory
+      .slice(-10)
+      .map((msg) => ({ role: msg.role, content: msg.content }));
 
-    const fullPrompt = `${this.buildSystemPrompt()}\n\nConversation:\n${conversationContext}\n\nAnswer the user’s latest question directly in a friendly and accurate way.`;
-    const aiResponse = await this.generateResponseWithOllama(fullPrompt);
+    const chatUrl = `${BASE_URL}/chat`;
+    console.log(`${LOG_PREFIX} Sending message to backend: ${chatUrl}`);
 
-    if (!aiResponse) {
-      throw new Error('Ollama did not return a response. Please try again.');
+    try {
+      const response = await this.timedFetch(
+        chatUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: trimmedMessage,
+            history: historySlice,
+          }),
+        },
+        DEFAULT_REQUEST_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const text = data.response;
+      if (!text) {
+        throw new Error('Backend did not return a response.');
+      }
+
+      this.conversationHistory.push({ role: 'assistant', content: text });
+      return {
+        success: true,
+        response: text,
+      };
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} Request failed: ${err.message}. Falling back to mock response.`);
+      // If request fails due to server issue, fall back to offline simulation
+      const mockReply = this.getMockResponse(trimmedMessage);
+      this.conversationHistory.push({ role: 'assistant', content: mockReply.response });
+      return {
+        success: true,
+        response: mockReply.response,
+      };
+    }
+  }
+
+  getMockResponse(userMessage) {
+    const msg = (userMessage || '').toLowerCase();
+    
+    if (msg.includes('black hole')) {
+      return {
+        response: "Commander, a black hole is a region of spacetime where gravity is so strong that nothing—not even light—can escape. It is formed when a massive star collapses at the end of its life cycle.\n\nThe boundary of a black hole is called the event horizon. Once anything crosses this boundary, it cannot escape. In the center of a black hole lies a singularity, where matter is crushed to infinite density. Would you like to know more about how we detect them, Commander?",
+        model: "offline-tutor-sim",
+      };
     }
 
-    this.conversationHistory.push({ role: 'assistant', content: aiResponse });
+    if (msg.includes('earth') || msg.includes('world') || msg.includes('home')) {
+      return {
+        response: "Earth, our home world, is the third planet from the Sun and the only astronomical object known to harbor life, Commander.\n\nAbout 71% of Earth's surface is covered with liquid water oceans, and it has a robust nitrogen-oxygen atmosphere that protects us from solar radiation. Earth is also equipped with a powerful magnetosphere generated by its rotating liquid iron outer core. It has exactly one natural satellite, Luna (the Moon).",
+        model: "offline-tutor-sim",
+      };
+    }
+
+    if (msg.includes('iss') || msg.includes('space station')) {
+      return {
+        response: "The International Space Station (ISS) is a modular space station in low Earth orbit. It is a collaborative project between NASA, Roscosmos, JAXA, ESA, and CSA, Commander.\n\nIt travels at a speed of about 27,600 km/h (17,100 mph), orbiting the Earth every 90 minutes! It serves as a microgravity and space environment research laboratory where crew members conduct experiments in biology, physics, and astronomy.",
+        model: "offline-tutor-sim",
+      };
+    }
+
+    if (msg.includes('mars') || msg.includes('red planet')) {
+      return {
+        response: "Mars, the Red Planet, is the fourth planet from the Sun and the second-smallest planet in the Solar System, Commander.\n\nIt has a thin carbon dioxide atmosphere and features giant volcanoes like Olympus Mons and vast canyons like Valles Marineris. Scientists are actively searching for signs of ancient microbial life there using robotic rovers. It has two tiny moons: Phobos and Deimos.",
+        model: "offline-tutor-sim",
+      };
+    }
+
+    if (msg.includes('neutron') || msg.includes('pulsar')) {
+      return {
+        response: "Commander, a neutron star is the collapsed core of a massive supergiant star. They are the smallest and densest known class of stellar objects, with a mass of about 1.4 Suns but a radius of only 10 kilometers!\n\nA single teaspoon of neutron star material would weigh about 6 billion tons on Earth. Fast-rotating neutron stars with strong magnetic fields are called Pulsars, and they emit beams of electromagnetic radiation.",
+        model: "offline-tutor-sim",
+      };
+    }
+
+    if (msg.includes('fact')) {
+      const facts = [
+        "One day on Venus is longer than one year on Venus! It takes 243 Earth days to rotate once on its axis, but only 225 Earth days to travel around the Sun.",
+        "Neutron stars are so dense that a single teaspoon of their material would weigh about 6 billion tons!",
+        "Space is completely silent because there is no atmosphere for sound waves to travel through.",
+        "The footprints left by Apollo astronauts on the Moon will probably stay there for at least 100 million years because there is no wind or water to wash them away.",
+        "The Sun accounts for 99.86% of the mass in our entire solar system!"
+      ];
+      const idx = Math.floor(Math.random() * facts.length);
+      return {
+        response: `Here is a space fact for you, Commander: ${facts[idx]}`,
+        model: "offline-tutor-sim",
+      };
+    }
+
     return {
-      success: true,
-      response: aiResponse,
+      response: `Commander, I received your message: "${userMessage}".\n\nI am currently running in Offline Simulation Mode because the FastAPI backend server is unreachable. To get full AI capabilities, please start the backend server by running the launch scripts (LAUNCH_ORBITX.bat) and ensure your devices are connected to the same network.\n\nIn the meantime, feel free to ask me about black holes, the ISS, Mars, neutron stars, or ask for a space fact!`,
+      model: "offline-tutor-sim",
     };
   }
 
@@ -386,10 +249,7 @@ class SpaceAIService {
   }
 
   setModel(modelName) {
-    if (typeof modelName === 'string' && modelName.trim().length > 0) {
-      this.model = modelName.trim();
-      this.modelVerified = false;
-    }
+    // Kept for signature compatibility
   }
 }
 
