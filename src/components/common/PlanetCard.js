@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import PlanetIllustration from './PlanetIllustration';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 42) / 2;
@@ -66,12 +67,12 @@ const PlanetCard = ({ planet, onPress, style }) => {
             style={[
               styles.planetVisual,
               {
-                backgroundColor: planet.color,
+                backgroundColor: 'transparent',
                 shadowColor: planet.glowColor,
               },
             ]}
           >
-            <Text style={styles.planetEmoji}>🌍</Text>
+            <PlanetIllustration planetName={planet.name} size={85} />
           </View>
 
           {/* Content */}

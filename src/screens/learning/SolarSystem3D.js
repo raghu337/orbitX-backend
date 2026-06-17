@@ -2,7 +2,16 @@ import { useIsFocused } from '@react-navigation/native';
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { BlurView } from 'expo-blur';
 import React, { useMemo, useRef, useState } from 'react';
-import { Dimensions, PanResponder, SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    Dimensions,
+    PanResponder,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { GestureHandlerRootView, PinchGestureHandler } from 'react-native-gesture-handler';
 import * as THREE from 'three';
 import Svg, { Path, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
@@ -214,7 +223,7 @@ const SolarSystem3D = ({ navigation }) => {
 
   const dynamicSunIntensity = useMemo(() => {
     // Adjust the base intensity of the Sun's light emission matrix (emissiveIntensity) to mimic changing solar cycles
-    return 2.0 + Math.sin(currentDay) * 0.5;
+    return 4.5 + Math.sin(currentDay) * 0.5;
   }, [currentDay]);
 
   // Set Mars as default target locked planet
@@ -310,7 +319,7 @@ const SolarSystem3D = ({ navigation }) => {
 
     let progress = 0;
     const interval = setInterval(() => {
-      progress += 5;
+      progress += 20;
       if (progress >= 100) {
         progress = 100;
         clearInterval(interval);
@@ -318,7 +327,7 @@ const SolarSystem3D = ({ navigation }) => {
         setScannedPlanets((prev) => ({ ...prev, [selectedPlanet.id]: true }));
       }
       setScanProgress(progress);
-    }, 80);
+    }, 30);
   };
 
   const visiblePlanets = useMemo(() => dynamicSolarSystem.filter((planet) => planet.id !== 'sun'), [dynamicSolarSystem]);
@@ -406,7 +415,7 @@ const SolarSystem3D = ({ navigation }) => {
                   />
                   <pointLight
                     castShadow
-                    intensity={3.2}
+                    intensity={5.5}
                     distance={130}
                     decay={1.2}
                     shadow-mapSize-width={1024}
@@ -648,6 +657,29 @@ const SolarSystem3D = ({ navigation }) => {
               </TouchableOpacity>
             )}
 
+            {/* Always-on quick selector inside active planet details card */}
+            <View style={[styles.quickSelector, { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', paddingTop: 8 }]}>
+              {dynamicSolarSystem.filter(p => p.id !== 'sun').map((p) => (
+                <TouchableOpacity
+                   key={p.id}
+                   style={[
+                     styles.quickSelectBtn, 
+                     { 
+                       borderColor: p.id === selectedPlanet.id ? p.color : p.color + '40',
+                       backgroundColor: p.id === selectedPlanet.id ? 'rgba(0, 229, 255, 0.12)' : 'rgba(6, 10, 28, 0.35)',
+                       width: '23%',
+                       marginBottom: 4,
+                     }
+                   ]}
+                   onPress={() => handlePlanetSelect(p)}
+                >
+                  <Text style={[styles.quickSelectBtnText, { color: p.color, fontWeight: p.id === selectedPlanet.id ? '900' : '800' }]}>
+                    {p.name.substring(0, 3).toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {/* Data Source Footer */}
             <View style={styles.sourceFooter}>
               <Text style={styles.sourceLabel}>DATA SOURCE:</Text>
@@ -722,15 +754,6 @@ const SolarSystem3D = ({ navigation }) => {
               <View style={styles.activeIndicatorBar} />
             </TouchableOpacity>
 
-            {/* Tab 4: Facts */}
-            <TouchableOpacity 
-              style={styles.tabItem}
-              onPress={() => navigation.navigate('HomeDashboard', { screen: 'Facts' })}
-            >
-              <MaterialCommunityIcons name="rocket-launch-outline" size={20} color="rgba(255, 255, 255, 0.45)" />
-              <Text style={styles.tabLabel}>Space Facts</Text>
-            </TouchableOpacity>
-
             {/* Tab 5: Chat */}
             <TouchableOpacity 
               style={styles.tabItem}
@@ -781,7 +804,7 @@ const CameraController = ({
       const modulation = Math.sin(time * 0.5 + currentDay) * 0.15;
 
       if (sunMaterialRef && sunMaterialRef.current) {
-        sunMaterialRef.current.emissiveIntensity = (2.0 + Math.sin(currentDay) * 0.5) + modulation * 2.0;
+        sunMaterialRef.current.emissiveIntensity = (4.5 + Math.sin(currentDay) * 0.5) + modulation * 2.0;
       }
       if (ambientLightRef && ambientLightRef.current) {
         ambientLightRef.current.intensity = 0.25 + modulation;
@@ -816,19 +839,19 @@ const CameraController = ({
     }
 
     if (currentLookAt && currentLookAt.current) {
-      // Apply damping interpolation (LERP)
-      currentLookAt.current.x += (targetX - currentLookAt.current.x) * 0.08;
-      currentLookAt.current.y += (targetY - currentLookAt.current.y) * 0.08;
-      currentLookAt.current.z += (targetZ - currentLookAt.current.z) * 0.08;
+      // Apply damping interpolation (LERP) - increased for faster/snappier tracking response
+      currentLookAt.current.x += (targetX - currentLookAt.current.x) * 0.18;
+      currentLookAt.current.y += (targetY - currentLookAt.current.y) * 0.18;
+      currentLookAt.current.z += (targetZ - currentLookAt.current.z) * 0.18;
     }
 
     if (currentZoom && currentZoom.current) {
-      currentZoom.current += (targetZoomVal - currentZoom.current) * 0.08;
+      currentZoom.current += (targetZoomVal - currentZoom.current) * 0.18;
     }
 
     if (currentRotation && currentRotation.current && rotationRef && rotationRef.current) {
-      currentRotation.current.x += (rotationRef.current.x - currentRotation.current.x) * 0.08;
-      currentRotation.current.y += (rotationRef.current.y - currentRotation.current.y) * 0.08;
+      currentRotation.current.x += (rotationRef.current.x - currentRotation.current.x) * 0.18;
+      currentRotation.current.y += (rotationRef.current.y - currentRotation.current.y) * 0.18;
     }
 
     if (camera && currentLookAt && currentLookAt.current && currentRotation && currentRotation.current && currentZoom) {

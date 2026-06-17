@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Animated,
     Easing,
     Modal,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,

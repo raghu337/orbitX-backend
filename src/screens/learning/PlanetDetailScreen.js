@@ -1,17 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Animated,
     Dimensions,
-    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import { getPlanetById } from '../../data/planetsData';
+import PlanetIllustration from '../../components/common/PlanetIllustration';
 
 const { width, height } = Dimensions.get('window');
 
@@ -97,12 +98,12 @@ const PlanetDetailScreen = ({ route, navigation }) => {
               style={[
                 styles.heroImage,
                 {
-                  backgroundColor: planet.color,
+                  backgroundColor: 'transparent',
                   shadowColor: planet.glowColor,
                 },
               ]}
             >
-              <Text style={styles.heroEmoji}>🌍</Text>
+              <PlanetIllustration planetName={planet.name} size={110} />
             </View>
             <Text style={styles.heroTitle}>{planet.name}</Text>
             <Text style={styles.heroSubtitle}>{planet.type}</Text>

@@ -1,13 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     ActivityIndicator,
     Animated,
     FlatList,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
@@ -88,7 +88,8 @@ const SpaceChatScreen = ({ navigation }) => {
    * Handle sending a message
    */
   const handleSendMessage = async (messageOverride = null) => {
-    const messageToSend = (messageOverride || inputText).trim();
+    const textToUse = typeof messageOverride === 'string' ? messageOverride : inputText;
+    const messageToSend = textToUse.trim();
     if (!messageToSend) return;
 
     const userMessage = {
@@ -266,11 +267,13 @@ const SpaceChatScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Messages list */}
+      {/* Keyboard Avoiding Container */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.content}
+        style={{ flex: 1 }}
       >
+        {/* Messages list */}
+        <View style={styles.content}>
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -323,10 +326,10 @@ const SpaceChatScreen = ({ navigation }) => {
             </View>
           </View>
         )}
-      </KeyboardAvoidingView>
+        </View>
 
-      {/* Input area */}
-      <View style={styles.inputContainer}>
+        {/* Input area */}
+        <View style={styles.inputContainer}>
         <LinearGradient
           colors={['rgba(0, 217, 255, 0.08)', 'rgba(100, 150, 255, 0.05)']}
           start={{ x: 0, y: 0 }}
@@ -345,7 +348,7 @@ const SpaceChatScreen = ({ navigation }) => {
           />
           <TouchableOpacity
             style={[styles.sendButton, loading && styles.sendButtonDisabled]}
-            onPress={handleSendMessage}
+            onPress={() => handleSendMessage()}
             disabled={loading || !inputText.trim()}
             activeOpacity={0.7}
           >
@@ -361,6 +364,7 @@ const SpaceChatScreen = ({ navigation }) => {
           </TouchableOpacity>
         </LinearGradient>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -467,6 +471,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 217, 255, 0.1)',
+    marginBottom: 30,
   },
   inputWrapper: {
     flexDirection: 'row',

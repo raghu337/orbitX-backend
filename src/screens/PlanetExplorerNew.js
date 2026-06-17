@@ -1,12 +1,12 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     ActivityIndicator,
     Animated,
     Dimensions,
     FlatList,
-    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,

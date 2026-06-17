@@ -1,7 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import QuizNavigator from '../navigation/QuizNavigator';
 import MainTabNavigator from './MainTabNavigator';
-import AIAssistantScreen from '../screens/ai/AIAssistantScreen';
 import ApodFavoritesScreen from '../screens/home/ApodFavoritesScreen';
 import NasaApodScreen from '../screens/home/NasaApodScreen';
 import PlanetDetailScreen from '../screens/learning/PlanetDetailScreen';
@@ -31,7 +30,7 @@ const AppNavigator = () => {
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="HomeDashboard" component={MainTabNavigator} />
-      <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
+      <Stack.Screen name="AIAssistant" component={SpaceChatScreen} />
       <Stack.Screen name="SpaceChat" component={SpaceChatScreen} />
       <Stack.Screen name="SatelliteTracker" component={LiveTracking} />
       <Stack.Screen name="PlanetExplorer" component={PlanetExplorerScreen} />

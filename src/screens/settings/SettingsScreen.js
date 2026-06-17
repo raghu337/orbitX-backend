@@ -14,9 +14,7 @@ import BackgroundGradient from '../../components/BackgroundGradient';
 import SectionHeader from '../../components/dashboard/SectionHeader';
 import NeonButton from '../../components/NeonButton';
 import GlassCard from '../../components/GlassCard';
-import SatelliteProximityAlertCard from '../../components/settings/SatelliteProximityAlertCard';
 import { useAuth } from '../../hooks/useAuth';
-import { useSatelliteAlerts } from '../../hooks/useSatelliteAlerts';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
 import { BASE_URL } from '../../services/api/orbitxApi';
 
@@ -68,13 +66,7 @@ const ManifestRow = ({ icon, title, value, onPress, hasChevron = true, children 
 
 const SettingsScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
-  const {
-    notificationsEnabled,
-    proximityAlertsEnabled,
-    trackedAlerts,
-    toggleNotifications,
-    toggleProximityAlerts,
-  } = useSatelliteAlerts();
+
 
   const [settings, setSettings] = useState({
     passes: false,
@@ -169,15 +161,7 @@ const SettingsScreen = ({ navigation }) => {
           </GlassCard>
         </View>
 
-        {/* Real-Time Alerts */}
-        <SectionHeader title="[ RADAR TELEMETRY // REAL-TIME ALERTS ]" />
-        <View style={styles.section}>
-          <SatelliteProximityAlertCard
-            enabled={proximityAlertsEnabled}
-            onToggle={toggleProximityAlerts}
-            trackedAlerts={trackedAlerts}
-          />
-        </View>
+
 
         {/* 01 // PILOT IDENTIFICATION */}
         <SectionHeader title="[ 01 // PILOT IDENTIFICATION ]" />
@@ -193,15 +177,7 @@ const SettingsScreen = ({ navigation }) => {
         <SectionHeader title="[ 02 // COMMS & NOTIFICATIONS ]" />
         <View style={styles.section}>
           <GlassCard style={styles.glassPanel}>
-            <ManifestRow icon="satellite-variant" title="Pass Predictions" hasChevron={false}>
-              <Switch
-                trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: `${COLORS.primary}40` }}
-                thumbColor={notificationsEnabled ? COLORS.primary : '#f4f3f4'}
-                ios_backgroundColor="rgba(255, 255, 255, 0.1)"
-                onValueChange={toggleNotifications}
-                value={notificationsEnabled}
-              />
-            </ManifestRow>
+
             
             <ManifestRow icon="lightbulb-on" title="Daily Space Facts" hasChevron={false}>
               <Switch

@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Animated,
     Dimensions,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -152,19 +152,7 @@ const HomeScreen = ({ navigation }) => {
 
             <View style={styles.gridRow}>
               <TouchableOpacity
-                style={[styles.gridCard, { borderColor: 'rgba(0, 255, 157, 0.2)' }]}
-                onPress={() => navigation.navigate('Facts')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.gridIconFrame, { backgroundColor: 'rgba(0, 255, 157, 0.08)' }]}>
-                  <MaterialCommunityIcons name="rocket-launch-outline" size={24} color={COLORS.success} />
-                </View>
-                <Text style={styles.gridCardTitle}>Space Facts</Text>
-                <Text style={styles.gridCardDesc}>Curated stellar intelligence</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gridCard, { borderColor: 'rgba(255, 184, 0, 0.2)' }]}
+                style={[styles.gridCard, { borderColor: 'rgba(255, 184, 0, 0.2)', width: '100%' }]}
                 onPress={() => navigation.navigate('QuizZone')}
                 activeOpacity={0.8}
               >

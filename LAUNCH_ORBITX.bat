@@ -39,8 +39,11 @@ echo  [OK] Firewall rule configured for TCP port 8000
 
 echo.
 echo  [3/4] Updating orbitxApi.js with LIVE IP...
-powershell -Command "$file='%~dp0src\services\api\orbitxApi.js'; $c=Get-Content $file -Raw; $c=$c -replace 'const MACHINE_IP = ''[^'']*'';', 'const MACHINE_IP = ''%WIFI_IP%'';'; Set-Content $file $c -Encoding UTF8"
-echo  [OK] Frontend API configured to use %WIFI_IP%
+if exist "%~dp0backend\venv\Scripts\python.exe" (
+    "%~dp0backend\venv\Scripts\python.exe" "%~dp0backend\update_network.py"
+) else (
+    python "%~dp0backend\update_network.py"
+)
 
 echo.
 echo  [4/4] Starting Services...

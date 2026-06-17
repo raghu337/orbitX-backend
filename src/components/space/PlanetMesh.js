@@ -178,53 +178,71 @@ const PlanetMesh = ({
 
   const isEarth = planet.id === 'earth';
 
-  // Apply scientific surface roughness & metallic reflection properties
+  // Apply scientific surface roughness, metalness, and emissive properties
   let roughness = 0.8;
   let metalness = 0.0;
+  let emissiveColor = '#000000';
+  let emissiveIntensity = 0.0;
 
   if (planet.id === 'mercury') {
-    roughness = 0.9; // Rocky slate-gray surface configuration with zero specular gloss
+    roughness = 0.95; // Heavily cratered slate-gray with zero specular gloss
     metalness = 0.0;
+    emissiveColor = '#000000';
+    emissiveIntensity = 0.0;
   } else if (planet.id === 'venus') {
-    roughness = 0.4; // High-density, uniform reflective atmosphere with medium gloss factor
+    roughness = 0.15; // High-density, brilliantly reflective atmosphere capsule
     metalness = 0.0;
+    emissiveColor = '#E3D1B5'; // Glow matching Venus' dense atmosphere
+    emissiveIntensity = 0.25;
   } else if (planet.id === 'earth') {
-    roughness = 0.4; // Shiny oceans, matte land
+    roughness = 0.4; // Shiny oceans
     metalness = 0.1;
+    emissiveColor = '#1A3B8B'; // Sapphire blue atmosphere tint
+    emissiveIntensity = 0.2;
   } else if (planet.id === 'mars') {
     roughness = 0.95; // Dusty matte iron-rust surface
     metalness = 0.0;
+    emissiveColor = '#C1440E';
+    emissiveIntensity = 0.15;
   } else if (planet.id === 'jupiter') {
-    roughness = 0.65;
+    roughness = 0.6; // Alternating gas bands
     metalness = 0.0;
+    emissiveColor = '#D4A373';
+    emissiveIntensity = 0.15;
   } else if (planet.id === 'saturn') {
-    roughness = 0.55;
+    roughness = 0.5; // Majestic golden gas body
     metalness = 0.0;
+    emissiveColor = '#E2BF7D';
+    emissiveIntensity = 0.15;
   } else if (planet.id === 'uranus') {
-    roughness = 0.8; // Smooth pale icy-cyan with clean matte material look
+    roughness = 0.7; // Ice giant aquamarine
     metalness = 0.0;
+    emissiveColor = '#4BB8BC'; // Glowing pale cyan/aquamarine signature
+    emissiveIntensity = 0.35;
   } else if (planet.id === 'neptune') {
-    roughness = 0.45;
-    metalness = 0.0;
+    roughness = 0.4; // Deep cobalt blue methane atmosphere
+    metalness = 0.1;
+    emissiveColor = '#274687'; // Glowing azure signature
+    emissiveIntensity = 0.3;
   }
 
   const standardProps = {
-    color: texture ? '#FFFFFF' : planet.color,
+    color: planet.color || '#FFFFFF',
     map: texture || null,
     roughness: roughness,
     metalness: metalness,
-    emissive: planet.emissive || '#000000',
-    emissiveIntensity: planet.emissive ? 0.25 : 0,
+    emissive: new THREE.Color(emissiveColor),
+    emissiveIntensity: emissiveIntensity,
   };
 
   const phongProps = {
-    color: texture ? '#FFFFFF' : planet.color,
+    color: planet.color || '#FFFFFF',
     map: texture || null,
     specularMap: specularMap || null,
-    specular: new THREE.Color(0x1a3b8b),
+    specular: new THREE.Color('#1A3B8B'),
     shininess: 30,
-    emissive: planet.emissive || '#000000',
-    emissiveIntensity: planet.emissive ? 0.25 : 0,
+    emissive: new THREE.Color(emissiveColor),
+    emissiveIntensity: emissiveIntensity,
   };
 
   return (
@@ -238,6 +256,10 @@ const PlanetMesh = ({
           castShadow 
           receiveShadow
           onPointerDown={(event) => {
+            event.stopPropagation();
+            onSelect(planet);
+          }}
+          onClick={(event) => {
             event.stopPropagation();
             onSelect(planet);
           }}
@@ -269,9 +291,9 @@ const PlanetMesh = ({
           <mesh rotation={[Math.PI / 2.5, 0, 0]} castShadow receiveShadow>
             <ringGeometry args={[scale * 1.4, scale * 2.5, 64]} />
             <meshStandardMaterial
-              color="#AFA38E" // Gorgeous semi-translucent gray-gold rings
+              color="#C5B495" // Majestic semi-translucent dust-gray and gold rings
               transparent
-              opacity={0.5}
+              opacity={0.65}
               side={THREE.DoubleSide}
             />
           </mesh>

@@ -1,5 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import AIAssistantScreen from '../screens/ai/AIAssistantScreen';
+import SpaceChatScreen from '../screens/SpaceChatScreen';
 import ARSkyScannerScreen from '../screens/ar/ARSkyScannerScreen';
 import HomeScreen from '../screens/home/HomeScreen';
 import PlanetExplorerScreen from '../screens/learning/PlanetExplorerScreen';
@@ -19,7 +19,7 @@ const HomeNavigator = () => {
       <Stack.Screen name="PlanetExplorer" component={PlanetExplorerScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="ARSkyScanner" component={ARSkyScannerScreen} />
-      <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
+      <Stack.Screen name="AIAssistant" component={SpaceChatScreen} />
     </Stack.Navigator>
   );
 };

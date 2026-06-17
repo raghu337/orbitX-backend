@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  StyleSheet,
-  Text,
-  View,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  SafeAreaView,
-  Share,
-  Platform,
+    StyleSheet,
+    Text,
+    View,
+    Image,
+    TouchableOpacity,
+    ScrollView,
+    ActivityIndicator,
+    Share,
+    Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';

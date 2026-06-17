@@ -4,6 +4,15 @@
 # from Android devices on the same WiFi network.
 # ============================================================
 
+# --- Execute Dynamic IP Update Script ---
+Write-Host "[OrbitX] Running dynamic network configuration discovery..." -ForegroundColor Cyan
+$venvPython = "$PSScriptRoot\backend\venv\Scripts\python.exe"
+if (Test-Path $venvPython) {
+    & $venvPython "$PSScriptRoot\backend\update_network.py"
+} else {
+    python "$PSScriptRoot\backend\update_network.py"
+}
+
 # --- Detect the Wi-Fi IPv4 address ---
 $wifiIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
     $_.InterfaceAlias -like "Wi-Fi*" -and $_.IPAddress -notlike "169.*"
@@ -53,7 +62,7 @@ if ($existing) {
 $apiFile = "$PSScriptRoot\src\services\api\orbitxApi.js"
 if (Test-Path $apiFile) {
     $content = Get-Content $apiFile -Raw
-    $updated = $content -replace "const MACHINE_IP = '[^']*';", "const MACHINE_IP = '$wifiIP'; // Auto-set by start_backend.ps1"
+    $updated = $content -replace "(?:export\s+)?const MACHINE_IP = '[^']*';", "export const MACHINE_IP = '$wifiIP';"
     Set-Content $apiFile $updated -Encoding UTF8
     Write-Host "[OrbitX] Updated orbitxApi.js: MACHINE_IP = '$wifiIP'" -ForegroundColor Green
 }
