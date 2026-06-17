@@ -35,10 +35,4 @@ class UserProgress(Base):
 
     course = relationship("Course", back_populates="user_progress")
 
-class Alert(Base):
-    __tablename__ = "alerts"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    satellite_id = Column(Integer, ForeignKey("satellites.id"))
-    alert_type = Column(String) # "pass", "visibility", etc.

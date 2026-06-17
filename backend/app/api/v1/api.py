@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, satellites, tracking, learning, progress, alerts, chat
+from app.api.v1.endpoints import auth, satellites, tracking, learning, progress
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -7,5 +7,3 @@ api_router.include_router(satellites.router, prefix="/satellites", tags=["satell
 api_router.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
 api_router.include_router(learning.router, prefix="/courses", tags=["learning"])
 api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
-api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
-api_router.include_router(chat.router, prefix="/chat", tags=["chat"])

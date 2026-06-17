@@ -17,7 +17,7 @@ from app.schemas.satellite import Satellite, SatelliteTracking
 
 router = APIRouter()
 
-async def fetch_n2yo_position(client: httpx.AsyncClient, sat_id: int, lat: float, lng: float, alt: int) -> Any:
+async def fetch_n2yo_position(client: httpx.AsyncClient, sat_id: int, lat: float, lng: float, alt: float) -> Any:
     url = f"https://api.n2yo.com/rest/v1/satellite/positions/{sat_id}/{lat}/{lng}/{alt}/1/?apiKey={settings.N2YO_API_KEY}"
     resp = await client.get(url)
     if resp.status_code != 200:
@@ -48,7 +48,7 @@ async def get_n2yo_positions(
     ids: str = Query(..., description="Comma-separated NORAD IDs"),
     lat: float = Query(..., description="Observer latitude"),
     lng: float = Query(..., description="Observer longitude"),
-    alt: int = Query(0, description="Observer altitude in meters"),
+    alt: float = Query(0.0, description="Observer altitude in meters"),
 ) -> Any:
     if not settings.N2YO_API_KEY:
         raise HTTPException(status_code=500, detail="N2YO API key is not configured on the server.")

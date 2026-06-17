@@ -78,67 +78,148 @@ async def get_chat_response(
         The AI-generated reply.
     """
     client = _get_client()
-    target_model = model or settings.GROQ_MODEL
-
-    # Build the messages array
-    messages = [{"role": "system", "content": SPACE_TUTOR_SYSTEM_PROMPT}]
-
-    # Append recent conversation history (cap at 10 turns for token budget)
-    if history:
-        for msg in history[-10:]:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role in ("user", "assistant") and content.strip():
-                messages.append({"role": role, "content": content})
-
-    # Append the current user message
-    messages.append({"role": "user", "content": user_message})
-
     try:
-        logger.info(
-            "Groq request: model=%s, messages=%d, temp=%.1f",
-            target_model,
-            len(messages),
-            temperature,
-        )
+        target_model = model or settings.GROQ_MODEL
 
-        chat_completion = await client.chat.completions.create(
-            model=target_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=0.9,
-            stream=False,
-        )
+        # Build the messages array
+        messages = [{"role": "system", "content": SPACE_TUTOR_SYSTEM_PROMPT}]
 
-        reply = chat_completion.choices[0].message.content
-        if not reply or not reply.strip():
-            raise ValueError("Groq returned an empty response.")
+        # Append recent conversation history (cap at 10 turns for token budget)
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content.strip():
+                    messages.append({"role": role, "content": content})
 
-        logger.info(
-            "Groq response: %d chars, model=%s",
-            len(reply),
-            chat_completion.model,
-        )
-        return reply.strip()
+        # Append the current user message
+        messages.append({"role": "user", "content": user_message})
 
-    except APITimeoutError:
-        logger.error("Groq API timeout for model %s", target_model)
-        raise ValueError(
-            "The AI service timed out. Please try again in a moment."
-        )
-    except RateLimitError:
-        logger.warning("Groq rate limit hit")
-        raise ValueError(
-            "The AI service is busy right now. Please wait a few seconds and try again."
-        )
-    except APIError as exc:
-        logger.error("Groq API error: %s", exc)
-        raise ValueError(
-            f"AI service error: {exc.message if hasattr(exc, 'message') else str(exc)}"
-        )
-    except Exception as exc:
-        logger.error("Unexpected Groq error: %s", exc, exc_info=True)
-        raise ValueError(
-            "An unexpected error occurred while contacting the AI. Please try again."
-        )
+        try:
+            logger.info(
+                "Groq request: model=%s, messages=%d, temp=%.1f",
+                target_model,
+                len(messages),
+                temperature,
+            )
+
+            chat_completion = await client.chat.completions.create(
+                model=target_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=0.9,
+                stream=False,
+            )
+
+            reply = chat_completion.choices[0].message.content
+            if not reply or not reply.strip():
+                raise ValueError("Groq returned an empty response.")
+
+            logger.info(
+                "Groq response: %d chars, model=%s",
+                len(reply),
+                chat_completion.model,
+            )
+            return reply.strip()
+
+        except APITimeoutError:
+            logger.error("Groq API timeout for model %s", target_model)
+            raise ValueError(
+                "The AI service timed out. Please try again in a moment."
+            )
+        except RateLimitError:
+            logger.warning("Groq rate limit hit")
+            raise ValueError(
+                "The AI service is busy right now. Please wait a few seconds and try again."
+            )
+        except APIError as exc:
+            logger.error("Groq API error: %s", exc)
+            raise ValueError(
+                f"AI service error: {exc.message if hasattr(exc, 'message') else str(exc)}"
+            )
+        except Exception as exc:
+            logger.error("Unexpected Groq error: %s", exc, exc_info=True)
+            raise ValueError(
+                "An unexpected error occurred while contacting the AI. Please try again."
+            )
+    finally:
+        await client.close()
+
+
+async def get_chat_response_stream(
+    user_message: str,
+    history: Optional[List[dict]] = None,
+    model: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+):
+    """
+    Send a streaming chat completion request to Groq and yield the response chunks.
+    """
+    client = _get_client()
+    try:
+        target_model = model or "llama-3.1-8b-instant"
+
+        # Build the messages array
+        messages = [{"role": "system", "content": SPACE_TUTOR_SYSTEM_PROMPT}]
+
+        # Append recent conversation history (cap at 10 turns for token budget)
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content.strip():
+                    messages.append({"role": role, "content": content})
+
+        # Append the current user message
+        messages.append({"role": "user", "content": user_message})
+
+        try:
+            logger.info(
+                "Groq stream request: model=%s, messages=%d, temp=%.1f",
+                target_model,
+                len(messages),
+                temperature,
+            )
+
+            chat_completion = await client.chat.completions.create(
+                model=target_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=0.9,
+                stream=True,
+            )
+
+            try:
+                async for chunk in chat_completion:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            finally:
+                yield "[DONE]"
+
+        except APITimeoutError:
+            logger.error("Groq API stream timeout for model %s", target_model)
+            raise ValueError(
+                "The AI service timed out. Please try again in a moment."
+            )
+        except RateLimitError:
+            logger.warning("Groq stream rate limit hit")
+            raise ValueError(
+                "The AI service is busy right now. Please wait a few seconds and try again."
+            )
+        except APIError as exc:
+            logger.error("Groq API stream error: %s", exc)
+            raise ValueError(
+                f"AI service error: {exc.message if hasattr(exc, 'message') else str(exc)}"
+            )
+        except Exception as exc:
+            logger.error("Unexpected Groq stream error: %s", exc, exc_info=True)
+            raise ValueError(
+                "An unexpected error occurred while contacting the AI. Please try again."
+            )
+    finally:
+        await client.close()
+
+

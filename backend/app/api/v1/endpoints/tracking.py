@@ -60,7 +60,7 @@ def health():
 
 
 @router.get('/pass_prediction')
-def pass_prediction(satellite_id: int, observer_lat: float, observer_lng: float, observer_alt: int = 0, days: int = 1):
+def pass_prediction(satellite_id: int, observer_lat: float, observer_lng: float, observer_alt: float = 0.0, days: int = 1):
     """Proxy pass prediction via N2YO if API key configured. Returns N2YO response or a fallback message."""
     api_key = settings.N2YO_API_KEY
     if not api_key:
