@@ -188,3 +188,16 @@ def read_user_me(
 def auth_ping():
     """Lightweight auth service check. No auth required."""
     return {"status": "ok", "service": "auth"}
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/users
+# ---------------------------------------------------------------------------
+@router.get("/users", response_model=list[User])
+def read_users(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(deps.get_current_user),
+) -> Any:
+    """Retrieve all registered users for the Admin user directory panel."""
+    users = db.query(UserModel).order_by(UserModel.id.desc()).all()
+    return users

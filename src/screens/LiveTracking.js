@@ -15,9 +15,7 @@ import {
 
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
-import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
-
-const AnimatedPolyline = Animated.createAnimatedComponent(Polyline);
+import MapView, { Marker } from 'react-native-maps';
 
 import { sendSatellitePassNotification } from '../notifications/notificationService';
 import gpsService from '../services/gpsService';
@@ -50,7 +48,7 @@ const TACTICAL_SPACE_MAP_STYLE = [
     "featureType": "administrative",
     "elementType": "geometry.stroke",
     "stylers": [
-      { "color": "#005b66" },
+      { "color": "#D4AF37" },
       { "width": 1 }
     ]
   },
@@ -111,8 +109,6 @@ export default function LiveTracking() {
   const alertBannerAnim = useRef(new Animated.Value(-124)).current;
   const redFlashAnim = useRef(new Animated.Value(0)).current;
   const redFlashLoop = useRef(null);
-  const redLinePulseAnim = useRef(new Animated.Value(0)).current;
-  const redLinePulseLoop = useRef(null);
   const overheadPopupAnim = useRef(new Animated.Value(0)).current;
   const starFieldAnim = useRef(new Animated.Value(0)).current;
   const nebulaPulseAnim = useRef(new Animated.Value(0)).current;
@@ -180,6 +176,68 @@ export default function LiveTracking() {
   const [tappedSatelliteId, setTappedSatelliteId] = useState(null);
   const tapScaleAnim = useRef(new Animated.Value(1)).current;
   const lastFocusedSatelliteIdRef = useRef(null);
+
+  const [satelliteSpeed, setSatelliteSpeed] = useState(27600);
+  const [satelliteHeading, setSatelliteHeading] = useState(135);
+  const [currentLatitude, setCurrentLatitude] = useState(0);
+  const [currentLongitude, setCurrentLongitude] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSatellites((prevSats) =>
+        prevSats.map((sat) => {
+          let nextLat = sat.latitude + 0.00004;
+          if (nextLat > 85) nextLat = -85;
+          let nextLon = sat.longitude + 0.00006;
+          if (nextLon > 180) nextLon = nextLon - 360;
+
+          const distanceKm =
+            isCoordinateValid(userLocationRef.current.latitude, userLocationRef.current.longitude) &&
+            isCoordinateValid(nextLat, nextLon)
+              ? calculateDistanceKm(
+                  userLocationRef.current.latitude,
+                  userLocationRef.current.longitude,
+                  nextLat,
+                  nextLon
+                )
+              : null;
+          const alertInfo = distanceKm != null ? getAlertInfo(distanceKm) : null;
+
+          return {
+            ...sat,
+            latitude: nextLat,
+            longitude: nextLon,
+            distanceKm,
+            alertLevel: alertInfo?.level ?? 0,
+            alertLabel: alertInfo?.label ?? null,
+            alertColor: alertInfo?.color ?? null,
+            alertRadius: alertInfo?.radius ?? null,
+          };
+        })
+      );
+
+      setSatelliteSpeed((prev) => {
+        const change = (Math.random() - 0.5) * 4;
+        const newSpeed = prev + change;
+        return newSpeed < 27580 ? 27580 : newSpeed > 27620 ? 27620 : newSpeed;
+      });
+
+      setSatelliteHeading((prev) => {
+        const change = (Math.random() - 0.5) * 2;
+        const newHeading = (prev + change + 360) % 360;
+        return newHeading;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (activeSatForHUD) {
+      setCurrentLatitude(activeSatForHUD.latitude);
+      setCurrentLongitude(activeSatForHUD.longitude);
+    }
+  }, [activeSatForHUD, activeSatForHUD?.latitude, activeSatForHUD?.longitude]);
 
   const selectedSatellite = useMemo(
     () => satellites.find((sat) => sat.id === selectedId) ?? null,
@@ -782,52 +840,12 @@ export default function LiveTracking() {
   }, [alertState.active, alertState.level, redFlashAnim]);
 
   useEffect(() => {
-    if (alertState.active && alertState.level >= 3) {
-      if (redLinePulseLoop.current) {
-        redLinePulseLoop.current.stop();
-      }
-
-      redLinePulseAnim.setValue(0);
-      redLinePulseLoop.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(redLinePulseAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(redLinePulseAnim, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      redLinePulseLoop.current.start();
-    } else {
-      if (redLinePulseLoop.current) {
-        redLinePulseLoop.current.stop();
-      }
-      redLinePulseAnim.setValue(0);
-    }
-  }, [alertState.active, alertState.level, redLinePulseAnim]);
-
-  useEffect(() => {
     Animated.timing(overheadPopupAnim, {
       toValue: alertState.isOverhead ? 1 : 0,
       duration: 260,
       useNativeDriver: true,
     }).start();
   }, [alertState.isOverhead, overheadPopupAnim]);
-
-  const redLineStrokeWidth = redLinePulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [3, 8],
-  });
-
-  const redEndpointScale = redLinePulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.35],
-  });
 
   useEffect(() => {
     if (alertState.active && alertState.level >= 3 && alertState.satellite) {
@@ -1063,7 +1081,7 @@ export default function LiveTracking() {
 
     console.log('[FOLLOW] updating camera for', activeSat.name);
     centerOnSatellite(activeSat);
-  }, [satellites, focusedSatellite, centerOnSatellite]);
+  }, [focusedSatellite, centerOnSatellite]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const centerOnSatellite = useCallback(
     (sat, attempt = 0) => {
@@ -1385,42 +1403,7 @@ export default function LiveTracking() {
           )}
         </View>
 
-        <View style={styles.statusActions}>
-          <TouchableOpacity
-            style={[styles.smallButton, mute && styles.smallButtonActive]}
-            onPress={() => setMute((value) => !value)}
-          >
-            <Text style={styles.smallButtonText}>{mute ? 'UNMUTE' : 'MUTE'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.smallButton, followSatellite && styles.smallButtonActive]}
-            onPress={() => {
-              if (followSatellite) {
-                setFollowSatellite(false);
-              } else {
-                setFollowSatellite(true);
-                setFollowUser(false);
-              }
-            }}
-          >
-            <Text style={styles.smallButtonText}>
-              {followSatellite ? 'TRACKING' : 'TRACK SAT'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.smallButton, followUser && styles.smallButtonActive]}
-            onPress={() => {
-              setFollowUser((value) => !value);
-              if (followSatellite) {
-                setFollowSatellite(false);
-              }
-            }}
-          >
-            <Text style={styles.smallButtonText}>
-              {followUser ? 'FOLLOW USER' : 'FREE VIEW'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+
       </View>
 
       {permissionDenied && (
@@ -1437,35 +1420,11 @@ export default function LiveTracking() {
         </View>
       )}
 
-      <Animated.View
-        style={[
-          styles.warningBanner,
-          styles[`warning${alertState.level}`],
-          {
-            transform: [{ translateY: alertBannerAnim }],
-            opacity:
-              alertState.active && alertState.level >= 3
-                ? redFlashAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 0.72],
-                  })
-                : 1,
-          },
-        ]}
-      >
-        <Text style={styles.warningText}>
-          {alertState.active ? `${alertState.title} — ${alertState.satellite?.name}` : 'SATELLITE APPROACHING'}
-        </Text>
-        <Text style={styles.warningSubtext} numberOfLines={1}>
-          {alertState.active
-            ? `${alertState.distanceKm?.toFixed(1)} km away • ETA ${countdownText || `${alertState.minutesUntilArrival ?? '--'} min`}`
-            : 'Tracking orbital threats...'}
-        </Text>
-      </Animated.View>
+
 
       <MapView
         ref={mapRef}
-        customMapStyle={TACTICAL_SPACE_MAP_STYLE}
+        mapType="hybrid"
         style={[
           styles.map,
           alertState.active && alertState.level >= 3 && styles.mapAlert,
@@ -1559,76 +1518,7 @@ export default function LiveTracking() {
           </View>
         </Marker>
 
-        {liveLocationActive && (
-          <Circle
-            center={userLocation}
-            radius={15000}
-            strokeColor="rgba(0,229,255,0.24)"
-            fillColor="rgba(0,229,255,0.08)"
-            strokeWidth={2}
-          />
-        )}
 
-        {alertState.active && alertState.satellite && (
-          <Circle
-            center={{
-              latitude: alertState.satellite.latitude,
-              longitude: alertState.satellite.longitude,
-            }}
-            radius={alertState.satellite.alertRadius || 220000}
-            strokeColor={alertState.satellite.alertColor || 'rgba(0,230,255,0.85)'}
-            fillColor="rgba(0,230,255,0.08)"
-            strokeWidth={2}
-          />
-        )}
-
-        {alertState.active &&
-          alertState.level >= 3 &&
-          alertState.satellite && (
-            <>
-              <AnimatedPolyline
-                coordinates={[userLocation, {
-                  latitude: alertState.satellite.latitude,
-                  longitude: alertState.satellite.longitude,
-                }]}
-                strokeColor={alertState.alertColor || '#FF4D4D'}
-                strokeWidth={redLineStrokeWidth}
-                lineCap="round"
-                lineJoin="round"
-                geodesic
-              />
-
-              <Marker key="red-alert-user" coordinate={userLocation}>
-                <Animated.View
-                  style={[
-                    styles.redAlertEndpoint,
-                    {
-                      transform: [{ scale: redEndpointScale }],
-                      backgroundColor: 'rgba(255, 59, 48, 0.95)',
-                    },
-                  ]}
-                />
-              </Marker>
-
-              <Marker
-                key={`${alertState.satellite.id}-red-alert-sat`}
-                coordinate={{
-                  latitude: alertState.satellite.latitude,
-                  longitude: alertState.satellite.longitude,
-                }}
-              >
-                <Animated.View
-                  style={[
-                    styles.redAlertEndpoint,
-                    {
-                      transform: [{ scale: redEndpointScale }],
-                      backgroundColor: 'rgba(255, 59, 48, 0.95)',
-                    },
-                  ]}
-                />
-              </Marker>
-            </>
-          )}
 
         {simulatedSatellite && (
           <Marker
@@ -1646,23 +1536,6 @@ export default function LiveTracking() {
 
         {showOrbitVectors && (
           <>
-            {orbitPaths.map(({ satellite: sat, path, futureState }) =>
-              path.length > 1 ? (
-                <Polyline
-                  key={`${sat.id}-orbit`}
-                  coordinates={path}
-                  strokeColor={
-                    selectedId === sat.id
-                      ? 'rgba(0, 229, 255, 0.95)'
-                      : 'rgba(0, 229, 255, 0.22)'
-                  }
-                  strokeWidth={selectedId === sat.id ? 4 : 2}
-                  lineCap="round"
-                  lineJoin="round"
-                  geodesic
-                />
-              ) : null
-            )}
             {orbitPaths.map(({ satellite: sat, futureState }) =>
               futureState ? (
                 <Marker
@@ -1692,10 +1565,36 @@ export default function LiveTracking() {
           </>
         )}
         {validSatellites.map((sat) => {
-          const iconSource = getSatelliteImage(sat);
-          const { tintColor, glowColor, badgeColor } = getSatelliteIconTheme(sat);
           const isSelected = selectedId === sat.id;
           const isTapped = tappedSatelliteId === sat.id;
+
+          const markerColor = (() => {
+            const upperName = (sat.name || '').toUpperCase();
+            if (upperName.includes('ISS')) return '#22C55E';
+            if (upperName.includes('NOAA')) return '#38BDF8';
+            if (upperName.includes('STARLINK') || upperName.includes('HUBBLE')) return '#E2E8F0';
+            return '#E2E8F0';
+          })();
+
+          const glowColor = (() => {
+            const upperName = (sat.name || '').toUpperCase();
+            if (upperName.includes('ISS')) return 'rgba(34, 197, 94, 0.24)';
+            if (upperName.includes('NOAA')) return 'rgba(56, 189, 248, 0.24)';
+            if (upperName.includes('STARLINK') || upperName.includes('HUBBLE')) return 'rgba(226, 232, 240, 0.24)';
+            return 'rgba(226, 232, 240, 0.24)';
+          })();
+
+          const shortName = (() => {
+            const upperName = (sat.name || '').toUpperCase();
+            if (upperName.includes('ISS')) return 'ISS';
+            if (upperName.includes('NOAA')) {
+              const match = sat.name.match(/NOAA-\d+/i);
+              return match ? match[0] : 'NOAA';
+            }
+            if (upperName.includes('STARLINK')) return 'Starlink';
+            if (upperName.includes('HUBBLE')) return 'Hubble';
+            return sat.name || 'Sat';
+          })();
 
           return (
             <Marker
@@ -1726,33 +1625,35 @@ export default function LiveTracking() {
                     styles.satelliteGlow,
                     {
                       backgroundColor: glowColor,
-                      shadowColor: tintColor,
+                      shadowColor: markerColor,
                     },
                   ]}
                 />
-                <Image
-                  source={iconSource}
-                  style={[
-                    styles.satelliteIcon,
-                    { tintColor },
-                    sat.alertLevel > 0 && styles.satelliteAlertIcon,
-                    isSelected && styles.satelliteIconSelected,
-                  ]}
-                  resizeMode="contain"
+                <MaterialCommunityIcons
+                  name="satellite-variant"
+                  size={24}
+                  color={markerColor}
                 />
-                <View
-                  style={[
-                    styles.satelliteBadge,
-                    { backgroundColor: badgeColor },
-                    sat.alertLevel > 0 && { opacity: 0.95 },
-                  ]}
-                />
+                <Text
+                  style={{
+                    fontSize: 10,
+                    color: '#FFFFFF',
+                    fontWeight: 'bold',
+                    marginTop: 2,
+                    textShadowColor: 'rgba(0,0,0,0.75)',
+                    textShadowRadius: 3,
+                    textShadowOffset: { width: -1, height: 1 },
+                    textAlign: 'center',
+                  }}
+                >
+                  {shortName}
+                </Text>
                 {alertingSatelliteId === sat.id && (
                   <Animated.View
                     style={[
                       styles.alertRing,
                       {
-                        borderColor: sat.alertColor || '#00E5FF',
+                        borderColor: sat.alertColor || '#D4AF37',
                         transform: [{ scale: pulseAnim }],
                       },
                     ]}
@@ -1912,6 +1813,26 @@ export default function LiveTracking() {
 
       {activeSatForHUD && (
         <View style={styles.hudContainer}>
+          <View style={styles.bottom}>
+            <Text style={styles.bottomTitle}>Live Satellite Fleet</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardList}>
+              {satellites.map((sat) => (
+                <TouchableOpacity
+                  key={sat.id}
+                  style={[
+                    styles.card,
+                    selectedId === sat.id && styles.cardSelected,
+                  ]}
+                  onPress={() => handleSelectSatellite(sat)}
+                >
+                  <Text style={styles.cardTitle}>{sat.name}</Text>
+                  <Text style={styles.cardSubtitle}>
+                    {sat.isLive ? 'LIVE' : 'SIMULATED'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
           <BlurView intensity={75} tint="dark" style={styles.hudBlur}>
             {/* HUD Header */}
             <View style={styles.hudHeader}>
@@ -1936,7 +1857,13 @@ export default function LiveTracking() {
               <View style={styles.hudGridCol}>
                 <Text style={styles.hudGridLabel}>SPEED</Text>
                 <Text style={styles.hudGridValue}>
-                  {((activeSatForHUD.velocity || 7.7) * 3600).toLocaleString(undefined, { maximumFractionDigits: 0 })} KM/H
+                  {satelliteSpeed.toFixed(0)} KM/H
+                </Text>
+              </View>
+              <View style={styles.hudGridCol}>
+                <Text style={styles.hudGridLabel}>HEADING</Text>
+                <Text style={styles.hudGridValue}>
+                  {satelliteHeading.toFixed(0)}°
                 </Text>
               </View>
               <View style={styles.hudGridCol}>
@@ -1953,7 +1880,7 @@ export default function LiveTracking() {
             <View style={styles.hudInfoRow}>
               <Text style={styles.hudInfoLabel}>LATITUDE / LONGITUDE:</Text>
               <Text style={styles.hudInfoValue}>
-                {activeSatForHUD.latitude?.toFixed(4)}° / {activeSatForHUD.longitude?.toFixed(4)}°
+                {currentLatitude.toFixed(4)}° / {currentLongitude.toFixed(4)}°
               </Text>
             </View>
             <View style={styles.hudInfoRow}>
@@ -1982,27 +1909,7 @@ export default function LiveTracking() {
 
       {/* Floating Tactical Control Dock */}
       <View style={styles.floatingControls}>
-        <TouchableOpacity
-          style={[styles.floatingButton, (followSatellite || followUser) && styles.floatingButtonActive]}
-          onPress={() => {
-            if (selectedId) {
-              setFollowSatellite(prev => !prev);
-              if (!followSatellite) setFollowUser(false);
-            } else {
-              setFollowUser(prev => !prev);
-              setFollowSatellite(false);
-            }
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.glowingRing}>
-            <MaterialCommunityIcons 
-              name={selectedId ? "crosshairs-gps" : "radar"} 
-              size={22} 
-              color={(followSatellite || followUser) ? COLORS.primary : "#fff"} 
-            />
-          </View>
-        </TouchableOpacity>
+
 
         <TouchableOpacity
           style={styles.floatingButton}
@@ -2033,73 +1940,9 @@ export default function LiveTracking() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.historyPanel}>
-        <Text style={styles.historyTitle}>Recent Contact</Text>
-        {alertHistory.length === 0 ? (
-          nearestSatellite ? (
-            <View style={styles.historyFocus}>
-              <Text style={styles.historyAlert}>Nearest Approach: {nearestSatellite.name}</Text>
-              <Text style={styles.historyDetails}>
-                Threat: {nearestSatellite.alertLabel ?? 'SCANNING'}
-              </Text>
-              <Text style={styles.historyDetails}>
-                Distance: {nearestSatellite.distanceKm?.toFixed(1) ?? 'n/a'} km
-              </Text>
-              <Text style={styles.historyDetails}>
-                ETA: {nearestSatellite.distanceKm != null ? `${getArrivalMinutes(nearestSatellite.distanceKm, nearestSatellite.velocity) ?? 'soon'} min` : 'calculating'}
-              </Text>
-              {countdownText ? (
-                <Text style={styles.historyDetails}>
-                  Countdown: {countdownText}
-                </Text>
-              ) : null}
-              <Text style={styles.historyDetails}>
-                Direction: {getApproachDirectionName(nearestSatellite, userLocationRef.current)}
-              </Text>
-              <Text style={styles.historyDetails}>
-                Status: {nearestSatellite.isLive ? 'LIVE TRACKING' : 'AUTO TEST MODE'}
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.historyEmpty}>Scanning satellite skies for the nearest approach...</Text>
-          )
-        ) : (
-          alertHistory.map((item) => (
-            <View key={item.id} style={styles.historyItem}>
-              <View>
-                <Text style={styles.historyAlert}>{item.name}</Text>
-                <Text style={styles.historyDetails}>
-                  {item.level} • {item.distanceKm.toFixed(1)} km • {item.direction}
-                </Text>
-              </View>
-              <Text style={styles.historyTime}>
-                {new Date(item.time).toLocaleTimeString()}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
 
-      <View style={styles.bottom}>
-        <Text style={styles.bottomTitle}>Live Satellite Fleet</Text>
-        <ScrollView contentContainerStyle={styles.cardList}>
-          {satellites.map((sat) => (
-            <TouchableOpacity
-              key={sat.id}
-              style={[
-                styles.card,
-                selectedId === sat.id && styles.cardSelected,
-              ]}
-              onPress={() => handleSelectSatellite(sat)}
-            >
-              <Text style={styles.cardTitle}>{sat.name}</Text>
-              <Text style={styles.cardSubtitle}>
-                {sat.isLive ? 'LIVE' : 'SIMULATED'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+
+
     </View>
   );
 }
@@ -2109,14 +1952,13 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   hudContainer: {
     position: 'absolute',
-    top: 80,
-    left: 16,
-    right: 16,
-    borderRadius: 20,
+    bottom: 80,
+    left: 0,
+    right: 0,
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: 'rgba(0, 229, 255, 0.35)',
-    backgroundColor: 'rgba(4, 7, 20, 0.55)',
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
     shadowColor: '#00E5FF',
     shadowOpacity: 0.3,
     shadowRadius: 15,
@@ -2308,18 +2150,18 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 1.5,
-    borderColor: 'rgba(0, 229, 255, 0.26)',
+    borderColor: 'rgba(212, 175, 55, 0.26)',
     overflow: 'hidden',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 229, 255, 0.02)',
+    backgroundColor: 'rgba(212, 175, 55, 0.02)',
   },
   radarWedge: {
     position: 'absolute',
     right: 0,
     width: 60,
     height: 120,
-    backgroundColor: 'rgba(0, 229, 255, 0.18)',
+    backgroundColor: 'rgba(212, 175, 55, 0.18)',
     borderTopRightRadius: 60,
     borderBottomRightRadius: 60,
   },
@@ -2328,33 +2170,33 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.25)',
+    borderColor: 'rgba(212, 175, 55, 0.25)',
   },
   userRadarCircleSmall: {
     position: 'absolute',
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.2)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   userPulse: {
     position: 'absolute',
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: 'rgba(0, 229, 255, 0.24)',
+    backgroundColor: 'rgba(212, 175, 55, 0.24)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.4)',
+    borderColor: 'rgba(212, 175, 55, 0.4)',
   },
   userDot: {
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#00E5FF',
+    backgroundColor: '#D4AF37',
     borderWidth: 2,
     borderColor: '#fff',
   },
@@ -2362,18 +2204,18 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(0, 229, 255, 0.9)',
+    backgroundColor: 'rgba(212, 175, 55, 0.9)',
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
-    shadowColor: '#00E5FF',
+    shadowColor: '#D4AF37',
     shadowOpacity: 0.5,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
   },
   predictedMarkerSelected: {
-    backgroundColor: '#00FFFF',
-    borderColor: '#00E5FF',
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
     width: 16,
     height: 16,
   },
@@ -2381,24 +2223,11 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#00FFFF',
+    backgroundColor: '#D4AF37',
     borderWidth: 1,
     borderColor: '#fff',
-    shadowColor: '#00FFFF',
+    shadowColor: '#D4AF37',
     shadowOpacity: 0.75,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
-  },
-  redAlertEndpoint: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.95)',
-    backgroundColor: 'rgba(255, 59, 48, 0.95)',
-    shadowColor: '#FF3B30',
-    shadowOpacity: 0.8,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
     elevation: 12,
@@ -2546,42 +2375,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  statusActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  smallButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#00E5FF',
-    backgroundColor: 'rgba(1, 26, 42, 0.8)',
-    marginLeft: 4,
-  },
-  smallButtonActive: {
-    backgroundColor: 'rgba(0, 229, 255, 0.18)',
-  },
-  smallButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  followButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#00E5FF',
-  },
-  followButtonActive: {
-    backgroundColor: 'rgba(0, 229, 255, 0.12)',
-  },
-  followButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+
   popupRadar: {
     position: 'absolute',
     top: -12,
@@ -2590,62 +2384,15 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.3)',
-    backgroundColor: 'rgba(0, 229, 255, 0.08)',
-    shadowColor: '#00E5FF',
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    shadowColor: '#D4AF37',
     shadowOpacity: 0.18,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  historyPanel: {
-    backgroundColor: '#00121f',
-    borderTopWidth: 1,
-    borderColor: '#033',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
-  historyTitle: {
-    color: '#a4f0ff',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  historyEmpty: {
-    color: '#8cbfd4',
-    fontSize: 12,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.08)',
-  },
-  historyAlert: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  historyDetails: {
-    color: '#8cdcff',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  historyTime: {
-    color: '#7df7ff',
-    fontSize: 10,
-  },
-  historyFocus: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(0, 229, 255, 0.08)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.2)',
-  },
+
   warningBanner: {
     position: 'absolute',
     top: 90,
@@ -2822,10 +2569,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   bottom: {
-    maxHeight: 240,
-    backgroundColor: '#011217',
-    borderTopWidth: 1,
-    borderColor: '#033',
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderBottomWidth: 1.5,
+    borderColor: 'rgba(0, 229, 255, 0.35)',
   },
   bottomTitle: {
     color: '#8ce3ff',

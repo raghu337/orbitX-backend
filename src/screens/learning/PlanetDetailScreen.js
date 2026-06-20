@@ -94,7 +94,8 @@ const PlanetDetailScreen = ({ route, navigation }) => {
             end={{ x: 1, y: 1 }}
             style={styles.heroSection}
           >
-            <View
+            <TouchableOpacity
+              activeOpacity={0.85}
               style={[
                 styles.heroImage,
                 {
@@ -102,9 +103,14 @@ const PlanetDetailScreen = ({ route, navigation }) => {
                   shadowColor: planet.glowColor,
                 },
               ]}
+              onPress={() => navigation.navigate('SolarSystem3D', { initialPlanetId: planet.id, initialBodyName: planet.name })}
             >
               <PlanetIllustration planetName={planet.name} size={110} />
-            </View>
+              <View style={styles.view3dBadge}>
+                <Ionicons name="cube-outline" size={12} color="#00D9FF" />
+                <Text style={styles.view3dBadgeText}>3D</Text>
+              </View>
+            </TouchableOpacity>
             <Text style={styles.heroTitle}>{planet.name}</Text>
             <Text style={styles.heroSubtitle}>{planet.type}</Text>
             <Text style={styles.heroDescription}>{planet.description}</Text>
@@ -406,6 +412,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 217, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  view3dBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: 'rgba(10, 14, 39, 0.85)',
+    borderColor: '#00D9FF',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00D9FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  view3dBadgeText: {
+    color: '#00D9FF',
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginLeft: 3,
+    letterSpacing: 0.5,
   },
 });
 

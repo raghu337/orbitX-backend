@@ -16,8 +16,10 @@ import GlassCard from '../components/GlassCard';
 import CustomInput from '../components/CustomInput';
 import NeonButton from '../components/NeonButton';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../theme/theme';
+import { useAuth } from '../hooks/useAuth';
 
 const SignupScreen = ({ navigation }) => {
+  const { signup, login } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,7 +31,7 @@ const SignupScreen = ({ navigation }) => {
     setError('');
     Keyboard.dismiss();
     
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -40,11 +42,19 @@ const SignupScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    setLoading(true);
-    setTimeout(() => {
+    try {
+      if (signup) {
+        await signup(email.trim(), password, name.trim());
+      }
+      if (login) {
+        await login(email.trim(), password);
+      }
       setLoading(false);
       navigation.replace('HomeDashboard');
-    }, 500);
+    } catch (err) {
+      setLoading(false);
+      setError(err.userMessage || err.message || 'Signup failed');
+    }
   };
 
   return (

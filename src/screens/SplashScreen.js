@@ -10,6 +10,7 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import BackgroundGradient from '../components/BackgroundGradient';
 import { COLORS, FONTS } from '../theme/theme';
 
@@ -41,8 +42,21 @@ const SplashScreen = ({ navigation }) => {
     );
 
     if (navigation) {
+      const checkSessionAndNavigate = async () => {
+        try {
+          const token = await AsyncStorage.getItem('userToken');
+          if (token) {
+            navigation.replace('HomeDashboard');
+          } else {
+            navigation.replace('Login');
+          }
+        } catch (e) {
+          navigation.replace('Login');
+        }
+      };
+
       const timer = setTimeout(() => {
-        navigation.replace('Login');
+        checkSessionAndNavigate();
       }, 3500);
 
       return () => clearTimeout(timer);

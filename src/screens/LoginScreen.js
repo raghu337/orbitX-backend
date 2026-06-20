@@ -16,8 +16,10 @@ import GlassCard from '../components/GlassCard';
 import CustomInput from '../components/CustomInput';
 import NeonButton from '../components/NeonButton';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../theme/theme';
+import { useAuth } from '../hooks/useAuth';
 
 const LoginScreen = ({ navigation }) => {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,11 +35,16 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    setLoading(true);
-    setTimeout(() => {
+    try {
+      if (login) {
+        await login(email.trim(), password);
+      }
       setLoading(false);
       navigation.replace('HomeDashboard');
-    }, 500);
+    } catch (err) {
+      setLoading(false);
+      setError(err.userMessage || err.message || 'Login failed');
+    }
   };
 
   return (

@@ -11,7 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { TextureLoader } from 'expo-three';
 
-const PLANET_TEXTURES = {
+export const PLANET_TEXTURES = {
   mercury: 'https://raw.githubusercontent.com/KyleGough/solar-system/master/textures/mercury.jpg',
   venus: 'https://raw.githubusercontent.com/KyleGough/solar-system/master/textures/venus.jpg',
   earth: require('../../../assets/images/earth.png'),
@@ -23,11 +23,47 @@ const PLANET_TEXTURES = {
   moon: require('../../../assets/images/moon.png'),
 };
 
+const TEXTURE_CACHE = {};
+const SPECULAR_CACHE = {};
+
+const EarthMaterial = ({ phongProps }) => {
+  const [specularMap, setSpecularMap] = useState(() => SPECULAR_CACHE['earth'] || null);
+
+  useEffect(() => {
+    if (SPECULAR_CACHE['earth']) return;
+
+    try {
+      const loader = new TextureLoader();
+      loader.load(
+        'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_specular_2048.jpg',
+        (specTex) => {
+          if (specTex) {
+            specTex.generateMipmaps = false;
+            specTex.minFilter = THREE.LinearFilter;
+            specTex.magFilter = THREE.LinearFilter;
+            SPECULAR_CACHE['earth'] = specTex;
+            setSpecularMap(specTex);
+          }
+        },
+        undefined,
+        (err) => {
+          console.warn('Error async loading Earth specular map:', err);
+        }
+      );
+    } catch (err) {
+      console.warn('Error loading Earth specular map:', err);
+    }
+  }, []);
+
+  return <meshPhongMaterial {...phongProps} specularMap={specularMap} />;
+};
+
 const PlanetMesh = ({
   planet,
   scale,
   distance,
   onSelect,
+  onSelectBody,
   orbitSpeed,
   rotationSpeed,
   isSelected,
@@ -40,8 +76,42 @@ const PlanetMesh = ({
   const phobosRef = useRef();
   const deimosRef = useRef();
 
-  const [texture, setTexture] = useState(null);
-  const [specularMap, setSpecularMap] = useState(null);
+  const [texture, setTexture] = useState(() => TEXTURE_CACHE[planet.id] || null);
+
+  // Load planet textures with global caching to prevent render crashes or network delays
+  useEffect(() => {
+    if (!planet || !planet.id) return;
+    if (TEXTURE_CACHE[planet.id]) {
+      setTexture(TEXTURE_CACHE[planet.id]);
+      return;
+    }
+
+    const textureSource = PLANET_TEXTURES[planet.id];
+    if (!textureSource) return;
+
+    try {
+      const loader = new TextureLoader();
+      loader.load(
+        textureSource,
+        (tex) => {
+          if (tex) {
+            tex.generateMipmaps = false;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.colorSpace = THREE.SRGBColorSpace;
+            TEXTURE_CACHE[planet.id] = tex;
+            setTexture(tex);
+          }
+        },
+        undefined,
+        (err) => {
+          console.warn(`Failed to async load texture for ${planet.id}:`, err);
+        }
+      );
+    } catch (e) {
+      console.warn(`Failed to resolve asset texture for ${planet.id}:`, e);
+    }
+  }, [planet.id]);
 
   // Set initial orbital position angle
   useEffect(() => {
@@ -75,58 +145,6 @@ const PlanetMesh = ({
     }
     return positions;
   }, [scale]);
-
-  useEffect(() => {
-    if (!planet || !planet.id) return;
-    const textureSource = PLANET_TEXTURES[planet.id];
-    if (!textureSource) return;
-
-    try {
-      const loader = new TextureLoader();
-      loader.load(
-        textureSource,
-        (tex) => {
-          if (tex) {
-            tex.generateMipmaps = false;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.colorSpace = THREE.SRGBColorSpace;
-            setTexture(tex);
-          }
-        },
-        undefined,
-        (err) => {
-          console.warn(`Failed to async load texture for ${planet.id}:`, err);
-        }
-      );
-    } catch (e) {
-      console.warn(`Failed to resolve asset texture for ${planet.id}:`, e);
-    }
-
-    // Load Earth specular map safely
-    if (planet.id === 'earth') {
-      try {
-        const loader = new TextureLoader();
-        loader.load(
-          'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_specular_2048.jpg',
-          (specTex) => {
-            if (specTex) {
-              specTex.generateMipmaps = false;
-              specTex.minFilter = THREE.LinearFilter;
-              specTex.magFilter = THREE.LinearFilter;
-              setSpecularMap(specTex);
-            }
-          },
-          undefined,
-          (err) => {
-            console.warn('Error async loading Earth specular map:', err);
-          }
-        );
-      } catch (err) {
-        console.warn('Error loading Earth specular map:', err);
-      }
-    }
-  }, [planet]);
 
   useFrame((state, delta) => {
     // 1. Pivot rotation (revolution around the Sun)
@@ -238,7 +256,6 @@ const PlanetMesh = ({
   const phongProps = {
     color: planet.color || '#FFFFFF',
     map: texture || null,
-    specularMap: specularMap || null,
     specular: new THREE.Color('#1A3B8B'),
     shininess: 30,
     emissive: new THREE.Color(emissiveColor),
@@ -257,16 +274,24 @@ const PlanetMesh = ({
           receiveShadow
           onPointerDown={(event) => {
             event.stopPropagation();
-            onSelect(planet);
+            if (onSelectBody) {
+              onSelectBody(planet.name);
+            } else {
+              onSelect(planet);
+            }
           }}
           onClick={(event) => {
             event.stopPropagation();
-            onSelect(planet);
+            if (onSelectBody) {
+              onSelectBody(planet.name);
+            } else {
+              onSelect(planet);
+            }
           }}
         >
-          <sphereGeometry args={[scale, 48, 48]} />
+          <sphereGeometry args={[scale, 24, 24]} />
           {isEarth ? (
-            <meshPhongMaterial {...phongProps} />
+            <EarthMaterial phongProps={phongProps} />
           ) : (
             <meshStandardMaterial {...standardProps} />
           )}
@@ -275,7 +300,7 @@ const PlanetMesh = ({
         {/* Atmospheric scattering layer for Earth and Venus */}
         {(planet.id === 'earth' || planet.id === 'venus') && (
           <mesh>
-            <sphereGeometry args={[scale * 1.12, 32, 32]} />
+            <sphereGeometry args={[scale * 1.12, 24, 24]} />
             <meshBasicMaterial
               color={planet.id === 'earth' ? '#8BE1F0' : '#E3D1B5'}
               transparent

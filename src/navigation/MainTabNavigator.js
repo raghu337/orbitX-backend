@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import ModuleErrorBoundary from '../components/common/ModuleErrorBoundary';
 import SpaceChatScreen from '../screens/SpaceChatScreen';
-import SettingsScreen from '../screens/settings/SettingsScreen';
+import ProfileScreen from '../screens/profile/ProfileScreen';
 import { COLORS, FONTS } from '../theme/theme';
 import BottomTabBar from './BottomTabBar';
 import HomeNavigator from './HomeNavigator';
@@ -26,7 +26,7 @@ const SafeHome = SafeScreen({ component: HomeNavigator, moduleName: 'Home Dashbo
 const SafeTracker = SafeScreen({ component: TrackingNavigator, moduleName: 'Satellite Tracker' });
 const SafeExplorer = SafeScreen({ component: LearningNavigator, moduleName: 'Planet Explorer' });
 const SafeChat = SafeScreen({ component: SpaceChatScreen, moduleName: 'AI Space Chatbot' });
-const SafeProfile = SafeScreen({ component: SettingsScreen, moduleName: 'User Profile' });
+const SafeProfile = SafeScreen({ component: ProfileScreen, moduleName: 'User Profile' });
 
 const MainTabNavigator = () => {
   return (

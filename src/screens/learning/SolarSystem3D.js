@@ -1,11 +1,13 @@
 import { useIsFocused } from '@react-navigation/native';
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { BlurView } from 'expo-blur';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, Suspense, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+    ActivityIndicator,
     Dimensions,
     PanResponder,
+    Platform,
     StatusBar,
     StyleSheet,
     Text,
@@ -17,9 +19,11 @@ import * as THREE from 'three';
 import Svg, { Path, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import OrbitRing from '../../components/space/OrbitRing';
-import PlanetMesh from '../../components/space/PlanetMesh';
+import PlanetMesh, { PLANET_TEXTURES } from '../../components/space/PlanetMesh';
 import SpaceBackground from '../../components/space/SpaceBackground';
 import { COLORS, SPACING, FONTS } from '../../theme/theme';
+
+const MONOSPACE_FONT = Platform.OS === 'ios' ? 'Courier' : 'monospace';
 
 const { width, height } = Dimensions.get('window');
 
@@ -198,7 +202,73 @@ const SOLAR_SYSTEM = [
   },
 ];
 
-const SolarSystem3D = ({ navigation }) => {
+const BODIES_DATA = {
+  sun: {
+    name: 'Sun (Core Star)',
+    type: 'Yellow Dwarf (G2V)',
+    temperature: '~5,500 °C (Surface)',
+    mass: '333,000 Earths',
+    description: 'The heart of our solar system, driving the orbital vectors and lifecycle parameters of all surrounding satellites.',
+  },
+  mercury: {
+    name: 'Mercury',
+    type: 'Terrestrial Planet',
+    temperature: '167 °C (Average)',
+    mass: '0.055 Earths',
+    description: 'The closest planet to the Sun, with a heavily cratered surface and the fastest orbit in the solar system.',
+  },
+  venus: {
+    name: 'Venus',
+    type: 'Terrestrial Planet',
+    temperature: '464 °C (Average)',
+    mass: '0.815 Earths',
+    description: 'A planet shrouded in a thick, toxic atmosphere of carbon dioxide, making it the hottest planet in our solar system.',
+  },
+  earth: {
+    name: 'Earth',
+    type: 'Terrestrial Planet',
+    temperature: '15 °C (Average)',
+    mass: '1 Earth',
+    description: 'Our home planet, the only known world with liquid water on its surface and active life-supporting ecosystems.',
+  },
+  mars: {
+    name: 'Mars',
+    type: 'Terrestrial Planet',
+    temperature: '-63 °C (Average)',
+    mass: '0.107 Earths',
+    description: 'The Red Planet, featuring oxidized iron dust, Olympus Mons, and frozen polar caps that hold ancient water potential.',
+  },
+  jupiter: {
+    name: 'Jupiter',
+    type: 'Gas Giant',
+    temperature: '-110 °C (Average)',
+    mass: '317.8 Earths',
+    description: 'The largest planet in our solar system, dominated by swirling gas bands and the massive, centuries-old Great Red Spot storm.',
+  },
+  saturn: {
+    name: 'Saturn',
+    type: 'Gas Giant',
+    temperature: '-140 °C (Average)',
+    mass: '95.2 Earths',
+    description: 'A majestic gas giant renowned for its spectacular and complex ring system made of billions of ice and rock particles.',
+  },
+  uranus: {
+    name: 'Uranus',
+    type: 'Ice Giant',
+    temperature: '-195 °C (Average)',
+    mass: '14.5 Earths',
+    description: 'A pale blue-green ice giant that uniquely rotates on a extreme sideways axis, potentially due to an ancient cosmic collision.',
+  },
+  neptune: {
+    name: 'Neptune',
+    type: 'Ice Giant',
+    temperature: '-200 °C (Average)',
+    mass: '17.1 Earths',
+    description: 'A cold, blue world swept by supersonic winds and supersonic storms, marking the outermost boundary of the major planets.',
+  }
+};
+
+const SolarSystem3D = ({ route, navigation }) => {
   const isFocused = useIsFocused();
   
   const currentDay = useMemo(() => new Date().getDate(), []);
@@ -228,9 +298,42 @@ const SolarSystem3D = ({ navigation }) => {
 
   // Set Mars as default target locked planet
   const [selectedPlanet, setSelectedPlanet] = useState(dynamicSolarSystem[4]);
+  const [selectedBody, setSelectedBody] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
   const [scannedPlanets, setScannedPlanets] = useState({ mars: true });
+
+  useEffect(() => {
+    const passedId = route?.params?.initialPlanetId;
+    const passedName = route?.params?.initialBodyName;
+    if (passedId) {
+      const match = dynamicSolarSystem.find(p => p.id === passedId.toLowerCase());
+      if (match) setSelectedPlanet(match);
+    } else if (passedName) {
+      const match = dynamicSolarSystem.find(p => p.name.toLowerCase() === passedName.toLowerCase());
+      if (match) setSelectedPlanet(match);
+    }
+  }, [route?.params?.initialPlanetId, route?.params?.initialBodyName, dynamicSolarSystem]);
+
+  const handleSelectBody = (bodyName) => {
+    if (!bodyName) {
+      setSelectedBody(null);
+      setSelectedPlanet(null);
+      return;
+    }
+    const key = bodyName.toLowerCase().split(' ')[0];
+    const bodyData = BODIES_DATA[key];
+    setSelectedBody(bodyData || null);
+
+    if (key === 'sun') {
+      setSelectedPlanet(dynamicSolarSystem[0]);
+    } else {
+      const planetObj = dynamicSolarSystem.find(p => p.name.toLowerCase() === key);
+      if (planetObj) {
+        handlePlanetSelect(planetObj);
+      }
+    }
+  };
 
   // 2D screen coordinate projection for selected planet
   const [marsScreenPos, setMarsScreenPos] = useState({ x: width / 2, y: height * 0.5 });
@@ -391,93 +494,113 @@ const SolarSystem3D = ({ navigation }) => {
       <PinchGestureHandler onGestureEvent={handlePinch} onHandlerStateChange={handlePinchStateChange}>
         <View style={styles.gestureSurface} {...panResponder.panHandlers}>
           <View style={styles.canvasWrapper}>
-            {isFocused && (
-              <Canvas
-                style={styles.canvas}
-                shadows={{ type: THREE.PCFShadowMap }}
-                camera={{ position: [0, 22, 55], fov: 60 }}
-              >
-                <fog attach="fog" args={['#040714', 25, 140]} />
-                <ambientLight ref={ambientLightRef} intensity={0.25} />
-                <directionalLight ref={directionalLightRef} intensity={0.5} position={[5, 10, 5]} />
+            {isFocused ? (
+              <Suspense fallback={
+                <View style={styles.canvasLoadingContainer}>
+                  <ActivityIndicator size="large" color="#00E5FF" />
+                  <Text style={styles.canvasLoadingText}>Pre-rendering Heliocentric Grid...</Text>
+                </View>
+              }>
+                <Canvas
+                  style={styles.canvas}
+                  shadows={{ type: THREE.PCFShadowMap }}
+                  camera={{ position: [0, 22, 55], fov: 60 }}
+                >
+                  <fog attach="fog" args={['#040714', 25, 140]} />
+                  <ambientLight ref={ambientLightRef} intensity={0.25} />
+                  <directionalLight ref={directionalLightRef} intensity={0.5} position={[5, 10, 5]} />
 
-                {/* Starry space background */}
-                <SpaceBackground starCount={340} />
+                  <Suspense fallback={null}>
+                    {/* Starry space background */}
+                    <SpaceBackground starCount={340} />
 
-                {/* Center Sun mesh with emissive material */}
-                <mesh position={[0, 0, 0]}>
-                  <sphereGeometry args={[2.5, 64, 64]} />
-                  <meshStandardMaterial
-                    ref={sunMaterialRef}
-                    color="#FFFFFF"
-                    emissive="#FF9D00"
-                    emissiveIntensity={dynamicSunIntensity}
+                    {/* Center Sun mesh with emissive material */}
+                    <mesh 
+                      position={[0, 0, 0]}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        handleSelectBody('Sun');
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSelectBody('Sun');
+                      }}
+                    >
+                      <sphereGeometry args={[2.5, 32, 32]} />
+                      <meshStandardMaterial
+                        ref={sunMaterialRef}
+                        color="#FFFFFF"
+                        emissive="#FF9D00"
+                        emissiveIntensity={dynamicSunIntensity}
+                      />
+                      <pointLight
+                        castShadow
+                        intensity={5.5}
+                        distance={130}
+                        decay={1.2}
+                        shadow-mapSize-width={1024}
+                        shadow-mapSize-height={1024}
+                      />
+                    </mesh>
+
+                    {/* Glowing coronas */}
+                    <mesh>
+                      <sphereGeometry args={[2.5 * 1.15, 32, 32]} />
+                      <meshBasicMaterial
+                        color="#FF9D00"
+                        transparent
+                        opacity={0.45}
+                        blending={THREE.AdditiveBlending}
+                        side={THREE.BackSide}
+                      />
+                    </mesh>
+                    <mesh>
+                      <sphereGeometry args={[2.5 * 1.35, 32, 32]} />
+                      <meshBasicMaterial
+                        color="#FF6B00"
+                        transparent
+                        opacity={0.2}
+                        blending={THREE.AdditiveBlending}
+                        side={THREE.BackSide}
+                      />
+                    </mesh>
+
+                    {/* Planet Orbits and Meshes */}
+                    {visiblePlanets.map((planet) => (
+                      <React.Fragment key={planet.id}>
+                        <OrbitRing radius={planet.distance} color={planet.color} opacity={0.14} />
+                        <PlanetMesh
+                          planet={planet}
+                          scale={planet.scale}
+                          distance={planet.distance}
+                          orbitSpeed={planet.orbitSpeed}
+                          rotationSpeed={planet.rotationSpeed}
+                          onSelect={handlePlanetSelect}
+                          onSelectBody={handleSelectBody}
+                          isSelected={selectedPlanet?.id === planet.id}
+                          planetPositionsRef={planetPositions}
+                          isScanning={isScanning && selectedPlanet?.id === planet.id}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </Suspense>
+
+                  {/* Camera controller & Planet projector */}
+                  <CameraController
+                    rotationRef={cameraRotation}
+                    zoomRef={cameraZoom}
+                    targetLookAt={targetLookAt}
+                    selectedPlanet={selectedPlanet}
+                    planetPositionsRef={planetPositions}
+                    onMarsProject={setMarsScreenPos}
+                    sunMaterialRef={sunMaterialRef}
+                    ambientLightRef={ambientLightRef}
+                    directionalLightRef={directionalLightRef}
+                    currentDay={currentDay}
                   />
-                  <pointLight
-                    castShadow
-                    intensity={5.5}
-                    distance={130}
-                    decay={1.2}
-                    shadow-mapSize-width={1024}
-                    shadow-mapSize-height={1024}
-                  />
-                </mesh>
-
-                {/* Glowing coronas */}
-                <mesh>
-                  <sphereGeometry args={[2.5 * 1.15, 32, 32]} />
-                  <meshBasicMaterial
-                    color="#FF9D00"
-                    transparent
-                    opacity={0.45}
-                    blending={THREE.AdditiveBlending}
-                    side={THREE.BackSide}
-                  />
-                </mesh>
-                <mesh>
-                  <sphereGeometry args={[2.5 * 1.35, 32, 32]} />
-                  <meshBasicMaterial
-                    color="#FF6B00"
-                    transparent
-                    opacity={0.2}
-                    blending={THREE.AdditiveBlending}
-                    side={THREE.BackSide}
-                  />
-                </mesh>
-
-                {/* Planet Orbits and Meshes */}
-                {visiblePlanets.map((planet) => (
-                  <React.Fragment key={planet.id}>
-                    <OrbitRing radius={planet.distance} color={planet.color} opacity={0.14} />
-                    <PlanetMesh
-                      planet={planet}
-                      scale={planet.scale}
-                      distance={planet.distance}
-                      orbitSpeed={planet.orbitSpeed}
-                      rotationSpeed={planet.rotationSpeed}
-                      onSelect={handlePlanetSelect}
-                      isSelected={selectedPlanet?.id === planet.id}
-                      planetPositionsRef={planetPositions}
-                      isScanning={isScanning && selectedPlanet?.id === planet.id}
-                    />
-                  </React.Fragment>
-                ))}
-
-                {/* Camera controller & Planet projector */}
-                <CameraController
-                  rotationRef={cameraRotation}
-                  zoomRef={cameraZoom}
-                  targetLookAt={targetLookAt}
-                  selectedPlanet={selectedPlanet}
-                  planetPositionsRef={planetPositions}
-                  onMarsProject={setMarsScreenPos}
-                  sunMaterialRef={sunMaterialRef}
-                  ambientLightRef={ambientLightRef}
-                  directionalLightRef={directionalLightRef}
-                  currentDay={currentDay}
-                />
-              </Canvas>
-            )}
+                </Canvas>
+              </Suspense>
+            ) : null}
           </View>
         </View>
       </PinchGestureHandler>
@@ -589,7 +712,7 @@ const SolarSystem3D = ({ navigation }) => {
       )}
 
       {/* Floating Glassmorphic Unified Telemetry Data Panel */}
-      {selectedPlanet && (
+      {selectedPlanet && !selectedBody && (
         <View style={styles.marsDataPanel}>
           <BlurView intensity={45} tint="dark" style={styles.hudCard}>
             <View style={styles.panelHeaderRow}>
@@ -671,7 +794,7 @@ const SolarSystem3D = ({ navigation }) => {
                        marginBottom: 4,
                      }
                    ]}
-                   onPress={() => handlePlanetSelect(p)}
+                   onPress={() => handleSelectBody(p.name)}
                 >
                   <Text style={[styles.quickSelectBtnText, { color: p.color, fontWeight: p.id === selectedPlanet.id ? '900' : '800' }]}>
                     {p.name.substring(0, 3).toUpperCase()}
@@ -693,8 +816,51 @@ const SolarSystem3D = ({ navigation }) => {
         </View>
       )}
 
-      {/* Heliocentric Quick Selector if no planet selected */}
-      {!selectedPlanet && (
+      {/* Sleek Bottom Detail Panel */}
+      {selectedBody && (
+        <View style={styles.bodyDetailPanel}>
+          <BlurView intensity={70} tint="dark" style={styles.bodyDetailHudCard}>
+            <View style={styles.panelHeaderRow}>
+              <View>
+                <Text style={styles.panelTitle}>{selectedBody.name.toUpperCase()}</Text>
+                <Text style={styles.panelSubtitle}>CLASSIFICATION: {selectedBody.type.toUpperCase()}</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={() => handleSelectBody(null)}
+              >
+                <Text style={styles.closeButtonText}>CLOSE [X]</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Classification & Scientific Metrics Grid */}
+            <View style={styles.dataGrid}>
+              <View style={styles.dataItem}>
+                <Text style={styles.dataLabel}>TEMPERATURE</Text>
+                <Text style={styles.dataValue}>{selectedBody.temperature.toUpperCase()}</Text>
+              </View>
+              <View style={styles.dataItem}>
+                <Text style={styles.dataLabel}>MASS / SCALE</Text>
+                <Text style={styles.dataValue}>{selectedBody.mass.toUpperCase()}</Text>
+              </View>
+            </View>
+
+            {/* Scientific Profile Description */}
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.descriptionText}>{selectedBody.description}</Text>
+            </View>
+
+            {/* Data Source Footer */}
+            <View style={styles.sourceFooter}>
+              <Text style={styles.sourceLabel}>TELEMETRY SOURCE:</Text>
+              <Text style={styles.sourceValue}>ORBITX HELIOCORE V2.0</Text>
+            </View>
+          </BlurView>
+        </View>
+      )}
+
+      {/* Heliocentric Quick Selector if no planet selected and no body selected */}
+      {!selectedPlanet && !selectedBody && (
         <View style={styles.marsDataPanel}>
           <BlurView intensity={30} tint="dark" style={styles.hudCard}>
             <Text style={styles.systemCoreTitle}>HELIOCENTRIC CORE TELEMETRY</Text>
@@ -704,7 +870,7 @@ const SolarSystem3D = ({ navigation }) => {
                 <TouchableOpacity
                    key={p.id}
                    style={[styles.quickSelectBtn, { borderColor: p.color + '40' }]}
-                   onPress={() => handlePlanetSelect(p)}
+                   onPress={() => handleSelectBody(p.name)}
                 >
                   <Text style={[styles.quickSelectBtnText, { color: p.color }]}>
                     {p.name.substring(0, 3).toUpperCase()}
@@ -745,7 +911,7 @@ const SolarSystem3D = ({ navigation }) => {
             {/* Tab 3: Explorer (Active) */}
             <TouchableOpacity 
               style={styles.tabItemActive}
-              onPress={() => handlePlanetSelect(dynamicSolarSystem[4])} // Lock Mars
+              onPress={() => handleSelectBody('Mars')} // Lock Mars
             >
               <View style={styles.activeIconWrapper}>
                 <MaterialCommunityIcons name="earth" size={22} color={COLORS.primary} />
@@ -774,6 +940,7 @@ const SolarSystem3D = ({ navigation }) => {
           </View>
         </BlurView>
       </View>
+
     </GestureHandlerRootView>
   );
 };
@@ -820,8 +987,11 @@ const CameraController = ({
     let targetZoomVal = zoomRef ? zoomRef.current : 55;
 
     // Follow selected planet position dynamically if locked
-    if (selectedPlanet && planetPositionsRef && planetPositionsRef.current && planetPositionsRef.current[selectedPlanet.id]) {
-      const pos = planetPositionsRef.current[selectedPlanet.id];
+    if (selectedPlanet) {
+      let pos = { x: 0, y: 0, z: 0 };
+      if (selectedPlanet.id !== 'sun' && planetPositionsRef && planetPositionsRef.current && planetPositionsRef.current[selectedPlanet.id]) {
+        pos = planetPositionsRef.current[selectedPlanet.id];
+      }
       targetX = pos.x;
       targetY = pos.y;
       targetZ = pos.z;
@@ -1079,6 +1249,20 @@ const styles = StyleSheet.create({
     width: PANEL_WIDTH,
     zIndex: 20,
   },
+  bodyDetailPanel: {
+    position: 'absolute',
+    bottom: 95,
+    left: PANEL_LEFT,
+    width: PANEL_WIDTH,
+    zIndex: 30,
+  },
+  bodyDetailHudCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.35)',
+    backgroundColor: 'rgba(6, 10, 28, 0.75)',
+    padding: 16,
+  },
   hudCard: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1334,6 +1518,122 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 3,
+  },
+  canvasLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#040714',
+  },
+  canvasLoadingText: {
+    marginTop: 12,
+    color: '#00E5FF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: FONTS.bold || 'System',
+    letterSpacing: 1,
+  },
+  diagnosticsWidget: {
+    position: 'absolute',
+    top: 145,
+    right: 16,
+    width: 145,
+    zIndex: 15,
+  },
+  cockpitDock: {
+    position: 'absolute',
+    top: 145,
+    left: 16,
+    width: 145,
+    zIndex: 15,
+  },
+  hudTile: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 255, 0.2)',
+    backgroundColor: 'rgba(12, 18, 38, 0.85)',
+    padding: 10,
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  widgetTitle: {
+    color: '#00E5FF',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    fontFamily: MONOSPACE_FONT,
+    marginBottom: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0, 229, 255, 0.2)',
+    paddingBottom: 4,
+    textAlign: 'center',
+  },
+  widgetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  widgetLabel: {
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontSize: 7,
+    fontFamily: MONOSPACE_FONT,
+    fontWeight: '700',
+  },
+  widgetVal: {
+    color: '#00E5FF',
+    fontSize: 7,
+    fontFamily: MONOSPACE_FONT,
+    fontWeight: 'bold',
+  },
+  cockpitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 229, 255, 0.06)',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginBottom: 5,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 229, 255, 0.15)',
+  },
+  cockpitBtnText: {
+    color: '#00E5FF',
+    fontSize: 6.8,
+    fontWeight: 'bold',
+    fontFamily: MONOSPACE_FONT,
+    marginLeft: 4,
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: height * 0.4,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  toastCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 157, 0.35)',
+    backgroundColor: 'rgba(12, 18, 38, 0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    shadowColor: '#00FF9D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  toastText: {
+    color: '#00FF9D',
+    fontSize: 9.5,
+    fontWeight: 'bold',
+    fontFamily: MONOSPACE_FONT,
+    letterSpacing: 0.8,
   },
 });
 
