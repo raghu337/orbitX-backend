@@ -21,7 +21,7 @@ export const QUIZ_CATEGORIES = [
   {
     id: 'planets',
     title: 'Planets',
-    icon: 'planet',
+    icon: 'earth',
     questions: 12,
     difficulty: 'BEGINNER',
     color: '#70D6FF',
@@ -43,7 +43,7 @@ export const QUIZ_CATEGORIES = [
   {
     id: 'galaxies',
     title: 'Galaxies',
-    icon: 'google-photos',
+    icon: 'image-multiple',
     questions: 14,
     difficulty: 'ADVANCED',
     color: '#A96BFF',
@@ -54,7 +54,7 @@ export const QUIZ_CATEGORIES = [
   {
     id: 'black_holes',
     title: 'Black Holes',
-    icon: 'black-hole',
+    icon: 'vortex',
     questions: 14,
     difficulty: 'EXPERT',
     color: '#FF3366',
@@ -102,7 +102,7 @@ export const QUIZ_BADGES = [
     id: 'mars_explorer',
     title: 'Mars Explorer',
     description: 'Earned after completing 3 Planets missions.',
-    icon: 'planet',
+    icon: 'earth',
     color: '#FF6F61',
   },
   {
@@ -137,7 +137,7 @@ export const QUIZ_BADGES = [
     id: 'black_hole_hunter',
     title: 'Black Hole Hunter',
     description: 'Win a Black Holes quiz in Expert difficulty.',
-    icon: 'black-hole',
+    icon: 'vortex',
     color: '#7A7BFF',
   },
 ];

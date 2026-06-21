@@ -1,7 +1,6 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
-import { BASE_URL } from './api/orbitxApi';
+import { BASE_URL, BACKEND_URL } from './api/orbitxApi';
 
 const DEFAULT_CHECK_TIMEOUT_MS = 7000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 25000;
@@ -82,7 +81,16 @@ class SpaceAIService {
       const healthUrl = `${baseUrl.replace('/api/v1', '')}/health`;
       console.log(`${LOG_PREFIX} Pinging health endpoint: ${healthUrl}`);
       
-      const response = await this.timedFetch(healthUrl, { method: 'GET' }, DEFAULT_CHECK_TIMEOUT_MS);
+      const response = await this.timedFetch(
+        healthUrl,
+        {
+          method: 'GET',
+          headers: {
+            'bypass-tunnel-reminder': 'true'
+          }
+        },
+        DEFAULT_CHECK_TIMEOUT_MS
+      );
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -113,52 +121,45 @@ class SpaceAIService {
       throw new Error('Please type a space question before sending.');
     }
 
-    const status = await this.checkConnection();
-    if (!status.online) {
-      console.log(`${LOG_PREFIX} Connection offline. Returning mock response.`);
-      await new Promise((resolve) => setTimeout(resolve, 800)); // Simulate realistic network delay
-      
-      const mockReply = this.getMockResponse(trimmedMessage);
-      this.conversationHistory.push({ role: 'user', content: trimmedMessage });
-      this.conversationHistory.push({ role: 'assistant', content: mockReply.response });
-      
-      return {
-        success: true,
-        response: mockReply.response,
-      };
-    }
-
     this.conversationHistory.push({ role: 'user', content: trimmedMessage });
     const historySlice = this.conversationHistory
       .slice(-10)
       .map((msg) => ({ role: msg.role, content: msg.content }));
 
-    const chatUrl = `${BASE_URL}/chat`;
-    console.log(`${LOG_PREFIX} Sending message to backend: ${chatUrl}`);
+    // Target the secure public ngrok tunnel URL for the assistant search endpoint
+    const searchUrl = `${BACKEND_URL}/api/search`;
+    console.log(`${LOG_PREFIX} Querying Space Assistant search endpoint: ${searchUrl}`);
 
     try {
       const response = await this.timedFetch(
-        chatUrl,
+        searchUrl,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'bypass-tunnel-reminder': 'true',
           },
           body: JSON.stringify({
-            message: trimmedMessage,
+            query: trimmedMessage,
             history: historySlice,
           }),
         },
-        DEFAULT_REQUEST_TIMEOUT_MS
+        10000 // Flexible 10-second timeout configuration to prevent premature handshake drops
       );
 
       if (!response.ok) {
-        const errText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errText}`);
+        const errorText = await response.text().catch(() => 'Unknown error');
+        const customError = new Error(`HTTP ${response.status}`);
+        customError.response = {
+          status: response.status,
+          data: errorText,
+        };
+        throw customError;
       }
 
       const data = await response.json();
-      const text = data.response;
+      const text = data.response || data.results || data.text;
       if (!text) {
         throw new Error('Backend did not return a response.');
       }
@@ -168,14 +169,39 @@ class SpaceAIService {
         success: true,
         response: text,
       };
-    } catch (err) {
-      console.warn(`${LOG_PREFIX} Request failed: ${err.message}. Falling back to mock response.`);
-      // If request fails due to server issue, fall back to offline simulation
-      const mockReply = this.getMockResponse(trimmedMessage);
-      this.conversationHistory.push({ role: 'assistant', content: mockReply.response });
+    } catch (error) {
+      // Set request/response mock structure to support diagnostics for native fetch errors
+      if (!error.response && (error.message.includes('Network') || error.message.includes('timeout') || error.message.includes('timed out') || error.name === 'TypeError')) {
+        error.request = {};
+      }
+
+      console.log("❌ [SPACE AI SEARCH ERROR]:", error.message);
+      if (error.response) {
+        console.log("🔍 Server Response Data:", error.response.data);
+        console.log("🔍 Server Response Status:", error.response.status);
+      } else if (error.request) {
+        console.log(`🔍 No Response Received. Check if backend is running and the ngrok tunnel at ${BACKEND_URL} is active`);
+      }
+
+      console.warn(`${LOG_PREFIX} Server request failed: ${error.message}. Displaying space-themed fallbacks.`);
+      
+      // Gracefully handle server unreachable / errors with structured space-themed celestial cache templates
+      let fallbackText = '';
+      const queryLower = trimmedMessage.toLowerCase();
+      
+      if (queryLower.includes('iss')) {
+        fallbackText = "International Space Station - Altitude: 420km, Speed: 27,600 km/h, Status: Nominal.";
+      } else if (queryLower.includes('orbit')) {
+        fallbackText = "OrbitX System - Active Fleet: 6 units, Database Sync: Connected.";
+      } else {
+        fallbackText = `Space AI is currently running in offline mode. (Reason: Backend at ${BACKEND_URL} is unreachable. Check your internet connection or if the ngrok tunnel is active).`;
+      }
+
+      this.conversationHistory.push({ role: 'assistant', content: fallbackText });
+      
       return {
         success: true,
-        response: mockReply.response,
+        response: fallbackText,
       };
     }
   }

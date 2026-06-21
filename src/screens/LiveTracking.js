@@ -4,7 +4,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,13 +16,15 @@ import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
 
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { db, onValue, ref } from '../../config/firebase';
+import { useAuth } from '../hooks/useAuth';
 import { sendSatellitePassNotification } from '../notifications/notificationService';
 import gpsService from '../services/gpsService';
 import { requestNotificationPermissions } from '../services/notificationService';
 import satelliteService from '../services/satelliteService';
-import { BlurView } from 'expo-blur';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { COLORS, FONTS, SHADOWS } from '../theme/theme';
+import { COLORS, FONTS } from '../theme/theme';
 
 const TACTICAL_SPACE_MAP_STYLE = [
   {
@@ -122,6 +123,13 @@ export default function LiveTracking() {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [followUser, setFollowUser] = useState(true);
   const [followSatellite, setFollowSatellite] = useState(false);
+  const [isTrackingSatellite, setIsTrackingSatellite] = useState(false);
+  const isTrackingSatelliteRef = useRef(false);
+
+  useEffect(() => {
+    isTrackingSatelliteRef.current = isTrackingSatellite;
+  }, [isTrackingSatellite]);
+
   const [liveLocationActive, setLiveLocationActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mute, setMute] = useState(false);
@@ -177,65 +185,88 @@ export default function LiveTracking() {
   const tapScaleAnim = useRef(new Animated.Value(1)).current;
   const lastFocusedSatelliteIdRef = useRef(null);
 
-  const [satelliteSpeed, setSatelliteSpeed] = useState(27600);
-  const [satelliteHeading, setSatelliteHeading] = useState(135);
-  const [currentLatitude, setCurrentLatitude] = useState(0);
-  const [currentLongitude, setCurrentLongitude] = useState(0);
+  const [speed, setSpeed] = useState(27600);
+  const [heading, setHeading] = useState(135);
+  const [satelliteLatitude, setSatelliteLatitude] = useState(0);
+  const [satelliteLongitude, setSatelliteLongitude] = useState(0);
+
+  const { user } = useAuth() || {};
+  const [fullName, setFullName] = useState(user?.name || "Reddy RaghuVardhan");
+  const [vesselEmail, setVesselEmail] = useState(user?.email || "orbitx.tracking@domain.com");
+  const [missionStatus, setMissionStatus] = useState("NOMINAL / ACTIVE");
+
+  const satelliteSpeed = speed;
+  const satelliteHeading = heading;
+  const currentLatitude = satelliteLatitude;
+  const currentLongitude = satelliteLongitude;
+
+  const activeTarget = useMemo(() => ({
+    fullName,
+    vesselEmail,
+    missionStatus,
+  }), [fullName, vesselEmail, missionStatus]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSatellites((prevSats) =>
-        prevSats.map((sat) => {
-          let nextLat = sat.latitude + 0.00004;
-          if (nextLat > 85) nextLat = -85;
-          let nextLon = sat.longitude + 0.00006;
-          if (nextLon > 180) nextLon = nextLon - 360;
+    const satRef = ref(db, 'satellites/iss');
+    const unsubscribeSat = onValue(satRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Dynamically update states with the incoming live Firebase packet keys
+        if (data.latitude) setSatelliteLatitude(data.latitude);
+        if (data.longitude) setSatelliteLongitude(data.longitude);
+        if (data.speed) setSpeed(data.speed);
+        if (data.heading) setHeading(data.heading);
+        if (data.fullName) setFullName(data.fullName);
+        if (data.vesselEmail) setVesselEmail(data.vesselEmail);
+        if (data.status) setMissionStatus(data.status);
 
-          const distanceKm =
-            isCoordinateValid(userLocationRef.current.latitude, userLocationRef.current.longitude) &&
-            isCoordinateValid(nextLat, nextLon)
-              ? calculateDistanceKm(
-                  userLocationRef.current.latitude,
-                  userLocationRef.current.longitude,
-                  nextLat,
-                  nextLon
-                )
-              : null;
-          const alertInfo = distanceKm != null ? getAlertInfo(distanceKm) : null;
+        // Dynamically update coordinates in the local satellites array so markers move on MapView
+        if (data.latitude && data.longitude) {
+          setSatellites((prevSats) =>
+            prevSats.map((sat) => {
+              if (sat.id === 'ISS') {
+                return {
+                  ...sat,
+                  latitude: data.latitude,
+                  longitude: data.longitude,
+                };
+              }
+              return sat;
+            })
+          );
+        }
+      } else {
+        // Fallback to local coordinate tracking variables so the app stays functional while it retries the handshake
+        setSatelliteLatitude((prev) => {
+          let next = prev + 0.00004;
+          return next > 85 ? -85 : next;
+        });
+        setSatelliteLongitude((prev) => {
+          let next = prev + 0.00006;
+          return next > 180 ? next - 360 : next;
+        });
+        setSpeed((prev) => {
+          const change = (Math.random() - 0.5) * 4;
+          const newSpeed = prev + change;
+          return newSpeed < 27580 ? 27580 : newSpeed > 27620 ? 27620 : newSpeed;
+        });
+        setHeading((prev) => {
+          const change = (Math.random() - 0.5) * 2;
+          const newHeading = (prev + change + 360) % 360;
+          return newHeading;
+        });
+      }
+    });
 
-          return {
-            ...sat,
-            latitude: nextLat,
-            longitude: nextLon,
-            distanceKm,
-            alertLevel: alertInfo?.level ?? 0,
-            alertLabel: alertInfo?.label ?? null,
-            alertColor: alertInfo?.color ?? null,
-            alertRadius: alertInfo?.radius ?? null,
-          };
-        })
-      );
-
-      setSatelliteSpeed((prev) => {
-        const change = (Math.random() - 0.5) * 4;
-        const newSpeed = prev + change;
-        return newSpeed < 27580 ? 27580 : newSpeed > 27620 ? 27620 : newSpeed;
-      });
-
-      setSatelliteHeading((prev) => {
-        const change = (Math.random() - 0.5) * 2;
-        const newHeading = (prev + change + 360) % 360;
-        return newHeading;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribeSat();
+    };
   }, []);
 
   useEffect(() => {
     if (activeSatForHUD) {
-      setCurrentLatitude(activeSatForHUD.latitude);
-      setCurrentLongitude(activeSatForHUD.longitude);
+      setSatelliteLatitude(activeSatForHUD.latitude);
+      setSatelliteLongitude(activeSatForHUD.longitude);
     }
   }, [activeSatForHUD, activeSatForHUD?.latitude, activeSatForHUD?.longitude]);
 
@@ -293,9 +324,9 @@ export default function LiveTracking() {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return earthRadiusKm * c;
   };
@@ -452,7 +483,7 @@ export default function LiveTracking() {
 
     const lat2 = Math.asin(
       Math.sin(lat1) * Math.cos(distanceKm / radius) +
-        Math.cos(lat1) * Math.sin(distanceKm / radius) * Math.cos(brng)
+      Math.cos(lat1) * Math.sin(distanceKm / radius) * Math.cos(brng)
     );
 
     const lon2 =
@@ -632,13 +663,13 @@ export default function LiveTracking() {
 
     const distanceKm =
       isCoordinateValid(observer.latitude, observer.longitude) &&
-      isCoordinateValid(finalLatitude, finalLongitude)
+        isCoordinateValid(finalLatitude, finalLongitude)
         ? calculateDistanceKm(
-            observer.latitude,
-            observer.longitude,
-            finalLatitude,
-            finalLongitude
-          )
+          observer.latitude,
+          observer.longitude,
+          finalLatitude,
+          finalLongitude
+        )
         : null;
 
     const alertInfo = distanceKm != null ? getAlertInfo(distanceKm) : null;
@@ -865,13 +896,13 @@ export default function LiveTracking() {
         const updated = merged.map((sat) => {
           const distanceKm =
             isCoordinateValid(userLocationRef.current.latitude, userLocationRef.current.longitude) &&
-            isCoordinateValid(sat.latitude, sat.longitude)
+              isCoordinateValid(sat.latitude, sat.longitude)
               ? calculateDistanceKm(
-                  userLocationRef.current.latitude,
-                  userLocationRef.current.longitude,
-                  sat.latitude,
-                  sat.longitude
-                )
+                userLocationRef.current.latitude,
+                userLocationRef.current.longitude,
+                sat.latitude,
+                sat.longitude
+              )
               : null;
           const alertInfo = distanceKm != null ? getAlertInfo(distanceKm) : null;
 
@@ -929,15 +960,17 @@ export default function LiveTracking() {
       if (!location || !mapRef.current?.animateToRegion) return;
       if (!isCoordinateValid(location.latitude, location.longitude)) return;
 
-      mapRef.current.animateToRegion(
-        {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.04,
-          longitudeDelta: 0.04,
-        },
-        1000
-      );
+      if (!isTrackingSatelliteRef.current) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            latitudeDelta: 0.04,
+            longitudeDelta: 0.04,
+          },
+          1000
+        );
+      }
     },
     []
   );
@@ -1053,7 +1086,17 @@ export default function LiveTracking() {
 
     setup();
 
+    const connectedRef = ref(db, '.info/connected');
+    const unsubscribeTest = onValue(connectedRef, (snap) => {
+      if (snap.val() === true) {
+        console.log("🟢 [FIREBASE STATUS]: Success! OrbitX is actively connected to the cloud backend database.");
+      } else {
+        console.warn("🔴 [FIREBASE STATUS]: Connection dropped. Retrying stream handshake...");
+      }
+    });
+
     return () => {
+      unsubscribeTest();
       locationSubscriptionRef.current?.remove();
       if (alarmSoundRef.current) {
         alarmSoundRef.current.unloadAsync().catch(() => null);
@@ -1252,82 +1295,10 @@ export default function LiveTracking() {
 
   const evaluateProximity = useCallback(
     async (updatedSatellites) => {
-      if (!Array.isArray(updatedSatellites) || !userLocationRef.current) return;
-
-      const nearest = updatedSatellites.reduce((best, sat) => {
-        if (sat.distanceKm == null) return best;
-        if (!best || sat.distanceKm < best.distanceKm) return sat;
-        return best;
-      }, null);
-
-      setNearestSatellite(nearest);
-      console.log(
-        '[Proximity] nearest satellite',
-        nearest?.name,
-        'distanceKm=',
-        nearest?.distanceKm,
-        'alertLevel=',
-        nearest?.alertLevel
-      );
-
-      const alerts = updatedSatellites
-        .filter((sat) => sat.distanceKm != null && sat.alertLevel >= 2)
-        .sort((a, b) => a.distanceKm - b.distanceKm);
-
-      if (alerts.length) {
-        setSimulatedSatellite(null);
-        await triggerSatelliteAlert(alerts[0]);
-        return;
-      }
-
-      if (!nearest) {
-        setAlertState({
-          active: false,
-          satellite: null,
-          level: null,
-          distanceKm: null,
-          minutesUntilArrival: null,
-          title: '',
-          description: '',
-          isOverhead: false,
-          passDirection: '',
-        });
-        setAlertingSatelliteId(null);
-        return;
-      }
-
-      if (nearest.distanceKm > 5000) {
-        const currentDistance = simulatedDistanceRef.current;
-        const nextDistance = Math.max(120, currentDistance - 260);
-        simulatedDistanceRef.current = nextDistance;
-        const simulated = buildSimulatedSatellite(userLocationRef.current, nextDistance);
-        setSimulatedSatellite(simulated);
-        setNearestSatellite(simulated);
-
-        console.log(
-          '[Proximity] simulation active',
-          simulated.name,
-          'distanceKm=',
-          simulated.distanceKm,
-          'alert=',
-          simulated.alertLabel
-        );
-
-        if (simulated.alertLevel > 0) {
-          await triggerSatelliteAlert(simulated);
-          return;
-        }
-
-        setAlertState((prev) => ({ ...prev, active: false, isOverhead: false, passDirection: '' }));
-        setAlertingSatelliteId(null);
-        return;
-      }
-
-      setSimulatedSatellite(null);
-      setAlertState((prev) => ({ ...prev, active: false, isOverhead: false, passDirection: '' }));
-      setAlertingSatelliteId(null);
+      // Proximity alerts permanently disabled
+      return;
     },
-    [triggerSatelliteAlert]
+    []
   );
 
   const startFollowSatellite = useCallback(() => {
@@ -1359,6 +1330,7 @@ export default function LiveTracking() {
       lastFocusedSatelliteIdRef.current = sat.id;
 
       centerOnSatellite(sat);
+      setIsTrackingSatellite(true);
       setTimeout(() => {
         if (lastFocusedSatelliteIdRef.current === sat.id) {
           setPopupOpen(true);
@@ -1396,11 +1368,7 @@ export default function LiveTracking() {
               {`Speed: ${userLocation.speed?.toFixed(1) ?? 0} m/s • Heading: ${userLocation.heading?.toFixed(0) ?? 0}°`}
             </Text>
           )}
-          {alertState.active && (
-            <Text style={[styles.statusText, styles.alertLabel]}>
-              {alertState.title} • {alertState.distanceKm?.toFixed(1)} km
-            </Text>
-          )}
+
         </View>
 
 
@@ -1780,36 +1748,7 @@ export default function LiveTracking() {
         </View>
       )}
 
-      <Animated.View
-        pointerEvents={alertState.isOverhead ? 'auto' : 'none'}
-        style={[
-          styles.overheadPopup,
-          {
-            opacity: overheadPopupAnim,
-            transform: [
-              {
-                translateY: overheadPopupAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [24, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        {alertState.isOverhead && alertState.satellite && (
-          <View style={styles.overheadCard}>
-            <Text style={styles.overheadTitle}>SATELLITE OVERHEAD</Text>
-            <Text style={styles.overheadSatellite}>{alertState.satellite.name}</Text>
-            <Text style={styles.overheadDirection}>
-              Exact pass direction: {alertState.passDirection || 'UNKNOWN'}
-            </Text>
-            <Text style={styles.overheadDistance}>
-              {alertState.distanceKm?.toFixed(1)} km away
-            </Text>
-          </View>
-        )}
-      </Animated.View>
+
 
       {activeSatForHUD && (
         <View style={styles.hudContainer}>
@@ -1892,19 +1831,60 @@ export default function LiveTracking() {
 
             <View style={styles.hudDivider} />
 
+            {/* Personnel & Vessel Comms */}
+            <View style={styles.hudInfoRow}>
+              <Text style={styles.hudInfoLabel}>FULL NAME:</Text>
+              <Text style={styles.hudInfoValue}>{activeTarget.fullName}</Text>
+            </View>
+            <View style={styles.hudInfoRow}>
+              <Text style={styles.hudInfoLabel}>VESSEL EMAIL:</Text>
+              <Text style={styles.hudInfoValue}>{activeTarget.vesselEmail}</Text>
+            </View>
+            <View style={styles.hudInfoRow}>
+              <Text style={styles.hudInfoLabel}>MISSION STATUS:</Text>
+              <Text style={[styles.hudInfoValue, { color: '#22C55E' }]}>
+                {activeTarget.missionStatus}
+              </Text>
+            </View>
+
+            <View style={styles.hudDivider} />
+
             {/* Live Ticker */}
             <View style={styles.hudTickerRow}>
               <Text style={styles.hudTickerLabel}>LIVE FLEET FEED // </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
                 {satellites.filter(s => s.id === 'ISS' || s.id === 'HUBBLE' || s.id === 'GPS' || s.id === 'NOAA').map(sat => (
                   <Text key={sat.id} style={styles.hudTickerText}>
-                    🛰️ {sat.name.toUpperCase()}: {((sat.velocity || 7.7) * 3600).toFixed(0)} KM/H [Alt: {sat.altitude?.toFixed(0)} KM]  •  
+                    🛰️ {sat.name.toUpperCase()}: {((sat.velocity || 7.7) * 3600).toFixed(0)} KM/H [Alt: {sat.altitude?.toFixed(0)} KM]  •
                   </Text>
                 ))}
               </ScrollView>
             </View>
           </BlurView>
         </View>
+      )}
+
+      {isTrackingSatellite && (
+        <TouchableOpacity
+          style={styles.resetCameraButton}
+          onPress={() => {
+            setIsTrackingSatellite(false);
+            if (userLocation) {
+              centerOnUserLocation(userLocation);
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <BlurView intensity={80} tint="dark" style={styles.resetCameraBlur}>
+            <MaterialCommunityIcons
+              name="crosshairs-gps"
+              size={16}
+              color="#00E5FF"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.resetCameraText}>Back to Me</Text>
+          </BlurView>
+        </TouchableOpacity>
       )}
 
       {/* Floating Tactical Control Dock */}
@@ -1917,10 +1897,10 @@ export default function LiveTracking() {
           activeOpacity={0.7}
         >
           <View style={styles.glowingRing}>
-            <MaterialCommunityIcons 
-              name="chevron-double-right" 
-              size={22} 
-              color="#fff" 
+            <MaterialCommunityIcons
+              name="chevron-double-right"
+              size={22}
+              color="#fff"
             />
           </View>
         </TouchableOpacity>
@@ -1931,10 +1911,10 @@ export default function LiveTracking() {
           activeOpacity={0.7}
         >
           <View style={styles.glowingRing}>
-            <MaterialCommunityIcons 
-              name="orbit" 
-              size={22} 
-              color={showOrbitVectors ? COLORS.primary : "#fff"} 
+            <MaterialCommunityIcons
+              name="orbit"
+              size={22}
+              color={showOrbitVectors ? COLORS.primary : "#fff"}
             />
           </View>
         </TouchableOpacity>
@@ -2607,6 +2587,32 @@ const styles = StyleSheet.create({
     color: '#93d7ff',
     marginTop: 4,
     fontSize: 12,
+  },
+  resetCameraButton: {
+    position: 'absolute',
+    top: 250,
+    right: 16,
+    zIndex: 101,
+    overflow: 'hidden',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 229, 255, 0.4)',
+    shadowColor: '#00E5FF',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  resetCameraBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  resetCameraText: {
+    color: '#00E5FF',
+    fontFamily: FONTS.bold,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
 });
 

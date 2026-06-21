@@ -53,6 +53,7 @@ async def get_chat_response(
     model: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 1024,
+    system_prompt: Optional[str] = None,
 ) -> str:
     """
     Send a chat completion request to Groq and return the assistant's
@@ -71,6 +72,8 @@ async def get_chat_response(
         Sampling temperature (0-2). Default 0.7 for balanced creativity.
     max_tokens : int
         Maximum tokens in the response.
+    system_prompt : str, optional
+        Override default system prompt.
 
     Returns
     -------
@@ -82,7 +85,7 @@ async def get_chat_response(
         target_model = model or settings.GROQ_MODEL
 
         # Build the messages array
-        messages = [{"role": "system", "content": SPACE_TUTOR_SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": system_prompt or SPACE_TUTOR_SYSTEM_PROMPT}]
 
         # Append recent conversation history (cap at 10 turns for token budget)
         if history:
