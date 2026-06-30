@@ -42,9 +42,11 @@ Rules:
 
 def _get_client() -> AsyncGroq:
     """Create a Groq async client. Raises if key is missing."""
-    if not settings.GROQ_API_KEY:
+    import os
+    api_key = os.getenv("GROQ_API_KEY") or settings.GROQ_API_KEY
+    if not api_key:
         raise ValueError("GROQ_API_KEY is not set in the environment.")
-    return AsyncGroq(api_key=settings.GROQ_API_KEY)
+    return AsyncGroq(api_key=api_key)
 
 
 async def get_chat_response(

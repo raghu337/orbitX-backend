@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    DATABASE_URL: str
+    FIREBASE_CREDENTIALS_PATH: str = "firebase-credentials.json"
+    FIREBASE_DATABASE_URL: str = "https://orbit-x-43dc3-default-rtdb.asia-southeast1.firebasedatabase.app/"
     N2YO_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "llama-3.1-8b-instant"

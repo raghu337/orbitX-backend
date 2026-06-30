@@ -1,40 +1,69 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 from datetime import datetime
 import random
 
 from app.schemas.satellite import SatelliteTracking
-from app.models.satellite import SatelliteTracking as TrackingModel
 from app.db.session import get_db
 from app.core.config import settings
 import httpx
 
 router = APIRouter()
 
-
 @router.get("/live", response_model=List[SatelliteTracking])
-def get_live_tracking(db: Session = Depends(get_db)) -> Any:
-    tracking_data = db.query(TrackingModel).order_by(
-        TrackingModel.timestamp.desc()
-    ).limit(100).all()
-
-    return tracking_data
-
+def get_live_tracking(db_conn: Any = Depends(get_db)) -> Any:
+    ref = db_conn.reference("satellite_tracking")
+    all_tracking = ref.get() or {}
+    
+    tracking_list = []
+    for sat_id, sat_tracks in all_tracking.items():
+        if isinstance(sat_tracks, dict):
+            for t_id, val in sat_tracks.items():
+                tid = int(t_id) if t_id.isdigit() else t_id
+                
+                timestamp_val = val.get("timestamp")
+                if isinstance(timestamp_val, str):
+                    timestamp_val = datetime.fromisoformat(timestamp_val)
+                    
+                tracking_list.append(SatelliteTracking(
+                    id=tid,
+                    satellite_id=int(sat_id) if sat_id.isdigit() else sat_id,
+                    latitude=val.get("latitude"),
+                    longitude=val.get("longitude"),
+                    altitude=val.get("altitude"),
+                    timestamp=timestamp_val
+                ))
+                
+    tracking_list.sort(key=lambda x: x.timestamp, reverse=True)
+    return tracking_list[:100]
 
 @router.get("/{satellite_id}", response_model=List[SatelliteTracking])
 def get_satellite_tracking(
     satellite_id: int,
-    db: Session = Depends(get_db),
+    db_conn: Any = Depends(get_db),
 ) -> Any:
-    tracking_data = db.query(TrackingModel).filter(
-        TrackingModel.satellite_id == satellite_id
-    ).order_by(
-        TrackingModel.timestamp.desc()
-    ).limit(200).all()
-
-    return tracking_data
-
+    ref = db_conn.reference(f"satellite_tracking/{satellite_id}")
+    tracking_data = ref.get() or {}
+    
+    tracking_list = []
+    for t_id, val in tracking_data.items():
+        tid = int(t_id) if t_id.isdigit() else t_id
+        
+        timestamp_val = val.get("timestamp")
+        if isinstance(timestamp_val, str):
+            timestamp_val = datetime.fromisoformat(timestamp_val)
+            
+        tracking_list.append(SatelliteTracking(
+            id=tid,
+            satellite_id=satellite_id,
+            latitude=val.get("latitude"),
+            longitude=val.get("longitude"),
+            altitude=val.get("altitude"),
+            timestamp=timestamp_val
+        ))
+        
+    tracking_list.sort(key=lambda x: x.timestamp, reverse=True)
+    return tracking_list[:200]
 
 @router.get("/live/realtime/demo")
 def realtime_demo():
@@ -49,7 +78,6 @@ def realtime_demo():
         "timestamp": datetime.utcnow()
     }
 
-
 @router.get("/health")
 def health():
     return {
@@ -57,7 +85,6 @@ def health():
         "system": "OrbitX Live Tracking",
         "timestamp": datetime.utcnow()
     }
-
 
 @router.get('/pass_prediction')
 def pass_prediction(satellite_id: int, observer_lat: float, observer_lng: float, observer_alt: float = 0.0, days: int = 1):

@@ -1,38 +1,22 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, Float
-from sqlalchemy.orm import relationship
-from app.db.session import Base
+class Course:
+    def __init__(self, id=None, title=None, description=None, difficulty_level=None):
+        self.id = id
+        self.title = title
+        self.description = description
+        self.difficulty_level = difficulty_level
 
-class Course(Base):
-    __tablename__ = "courses"
+class Quiz:
+    def __init__(self, id=None, course_id=None, question=None, options=None, correct_answer=None):
+        self.id = id
+        self.course_id = course_id
+        self.question = question
+        self.options = options or []
+        self.correct_answer = correct_answer
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)
-    description = Column(Text)
-    difficulty_level = Column(String)
-
-    quizzes = relationship("Quiz", back_populates="course")
-    user_progress = relationship("UserProgress", back_populates="course")
-
-class Quiz(Base):
-    __tablename__ = "quizzes"
-
-    id = Column(Integer, primary_key=True, index=True)
-    course_id = Column(Integer, ForeignKey("courses.id"))
-    question = Column(Text)
-    options = Column(JSON) # ["A", "B", "C", "D"]
-    correct_answer = Column(String)
-
-    course = relationship("Course", back_populates="quizzes")
-
-class UserProgress(Base):
-    __tablename__ = "user_progress"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    course_id = Column(Integer, ForeignKey("courses.id"))
-    progress_percentage = Column(Float, default=0.0)
-    score = Column(Integer, default=0)
-
-    course = relationship("Course", back_populates="user_progress")
-
-
+class UserProgress:
+    def __init__(self, id=None, user_id=None, course_id=None, progress_percentage=0.0, score=0):
+        self.id = id
+        self.user_id = user_id
+        self.course_id = course_id
+        self.progress_percentage = progress_percentage
+        self.score = score

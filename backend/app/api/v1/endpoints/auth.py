@@ -1,10 +1,9 @@
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 
 from app.schemas.user import User, UserCreate
 from app.schemas.token import Token
@@ -23,15 +22,12 @@ router = APIRouter()
 @router.post("/login", response_model=Token)
 async def login_access_token(
     request: Request,
-    db: Session = Depends(get_db),
+    db_conn: Any = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Any:
     """
-    OAuth2-compatible login. Expects application/x-www-form-urlencoded.
+    OAuth2-compatible login.
     Returns a JWT bearer token on success.
-
-    IMPORTANT: Uses async def + asyncio.to_thread for bcrypt so the event loop
-    is never blocked — this was the root cause of the original login hang.
     """
     start_time = time.time()
     client_ip = request.client.host if request.client else "unknown"
@@ -41,18 +37,31 @@ async def login_access_token(
     print(f"[Auth]   IP    : {client_ip}")
     print(f"{'='*55}")
 
-    # Step 1: DB user lookup
-    print("[Auth] Step 1/4: Querying database...")
+    # Step 1: Firebase user lookup by email
+    print("[Auth] Step 1/4: Querying Firebase...")
     try:
-        user = db.query(UserModel).filter(
-            UserModel.email == form_data.username
-        ).first()
+        ref = db_conn.reference("users")
+        users_data = ref.order_by_child("email").equal_to(form_data.username).get()
     except Exception as db_err:
         elapsed = round((time.time() - start_time) * 1000)
-        print(f"[Auth] FAIL: DB query error after {elapsed}ms: {db_err}")
+        print(f"[Auth] FAIL: Firebase query error after {elapsed}ms: {db_err}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database temporarily unavailable. Please try again.",
+        )
+
+    user = None
+    if users_data:
+        user_id = list(users_data.keys())[0]
+        user_dict = list(users_data.values())[0]
+        uid = int(user_id) if user_id.isdigit() else user_id
+        user = UserModel(
+            id=uid,
+            name=user_dict.get("name"),
+            email=user_dict.get("email"),
+            password_hash=user_dict.get("password_hash"),
+            role=user_dict.get("role"),
+            created_at=user_dict.get("created_at")
         )
 
     if not user:
@@ -65,8 +74,8 @@ async def login_access_token(
         )
     print(f"[Auth] Step 1 OK: User found id={user.id} name='{user.name}'")
 
-    # Step 2: Password verification (async — does NOT block the event loop)
-    print("[Auth] Step 2/4: Verifying password via async bcrypt...")
+    # Step 2: Password verification
+    print("[Auth] Step 2/4: Verifying password...")
     try:
         password_ok = await security.async_verify_password(
             form_data.password, user.password_hash
@@ -94,7 +103,7 @@ async def login_access_token(
     try:
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         token = security.create_access_token(
-            user.id, expires_delta=access_token_expires
+            str(user.id), expires_delta=access_token_expires
         )
     except Exception as jwt_err:
         elapsed = round((time.time() - start_time) * 1000)
@@ -103,7 +112,7 @@ async def login_access_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Token generation failed. Please try again.",
         )
-    print(f"[Auth] Step 3 OK: Token generated (expires {settings.ACCESS_TOKEN_EXPIRE_MINUTES}min)")
+    print(f"[Auth] Step 3 OK: Token generated")
 
     # Step 4: Return response
     elapsed = round((time.time() - start_time) * 1000)
@@ -122,16 +131,15 @@ async def login_access_token(
 @router.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
 async def create_user(
     *,
-    db: Session = Depends(get_db),
+    db_conn: Any = Depends(get_db),
     user_in: UserCreate,
 ) -> Any:
     """Register a new user account."""
     print(f"[Auth] SIGNUP REQUEST for: {user_in.email}")
 
-    existing = db.query(UserModel).filter(
-        UserModel.email == user_in.email
-    ).first()
-    if existing:
+    ref = db_conn.reference("users")
+    existing_data = ref.order_by_child("email").equal_to(user_in.email).get()
+    if existing_data:
         print(f"[Auth] FAIL: Email already registered: {user_in.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -148,26 +156,32 @@ async def create_user(
             detail="Could not process password. Please try again.",
         )
 
-    user = UserModel(
-        email=user_in.email,
-        password_hash=hashed_pw,
-        name=user_in.name or "Space Explorer",
-        role=user_in.role or "user",
-    )
+    user_id = int(time.time() * 1000)
+    user_data = {
+        "id": user_id,
+        "email": user_in.email,
+        "password_hash": hashed_pw,
+        "name": user_in.name or "Space Explorer",
+        "role": user_in.role or "user",
+        "created_at": datetime.utcnow().isoformat()
+    }
     try:
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        ref.child(str(user_id)).set(user_data)
     except Exception as e:
-        db.rollback()
-        print(f"[Auth] FAIL: DB error during signup: {e}")
+        print(f"[Auth] FAIL: Firebase error during signup: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not create account. Please try again.",
         )
 
-    print(f"[Auth] SIGNUP OK: id={user.id} email={user.email}")
-    return user
+    print(f"[Auth] SIGNUP OK: id={user_id} email={user_in.email}")
+    return User(
+        id=user_id,
+        email=user_data["email"],
+        name=user_data["name"],
+        role=user_data["role"],
+        created_at=datetime.fromisoformat(user_data["created_at"])
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +192,13 @@ def read_user_me(
     current_user: UserModel = Depends(deps.get_current_user),
 ) -> Any:
     """Return the currently authenticated user's profile."""
-    return current_user
+    return User(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role,
+        created_at=datetime.fromisoformat(current_user.created_at) if isinstance(current_user.created_at, str) else current_user.created_at
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -195,9 +215,23 @@ def auth_ping():
 # ---------------------------------------------------------------------------
 @router.get("/users", response_model=list[User])
 def read_users(
-    db: Session = Depends(get_db),
+    db_conn: Any = Depends(get_db),
     current_user: UserModel = Depends(deps.get_current_user),
 ) -> Any:
     """Retrieve all registered users for the Admin user directory panel."""
-    users = db.query(UserModel).order_by(UserModel.id.desc()).all()
-    return users
+    users_data = db_conn.reference("users").get() or {}
+    users_list = []
+    for u_id, u_val in users_data.items():
+        uid = int(u_id) if u_id.isdigit() else u_id
+        created_at_val = u_val.get("created_at")
+        if isinstance(created_at_val, str):
+            created_at_val = datetime.fromisoformat(created_at_val)
+        users_list.append(User(
+            id=uid,
+            name=u_val.get("name"),
+            email=u_val.get("email"),
+            role=u_val.get("role"),
+            created_at=created_at_val
+        ))
+    users_list.sort(key=lambda x: x.id if isinstance(x.id, int) else 0, reverse=True)
+    return users_list

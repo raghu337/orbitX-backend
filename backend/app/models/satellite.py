@@ -1,38 +1,25 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.db.session import Base
+from datetime import datetime
 
-class Satellite(Base):
-    __tablename__ = "satellites"
+class Satellite:
+    def __init__(self, id=None, name=None, norad_id=None, country=None, launch_date=None, orbit_type=None):
+        self.id = id
+        self.name = name
+        self.norad_id = norad_id
+        self.country = country
+        self.launch_date = launch_date or datetime.utcnow().isoformat()
+        self.orbit_type = orbit_type
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    norad_id = Column(Integer, unique=True, index=True)
-    country = Column(String)
-    launch_date = Column(DateTime)
-    orbit_type = Column(String)
+class SatelliteTracking:
+    def __init__(self, id=None, satellite_id=None, latitude=None, longitude=None, altitude=None, timestamp=None):
+        self.id = id
+        self.satellite_id = satellite_id
+        self.latitude = latitude
+        self.longitude = longitude
+        self.altitude = altitude
+        self.timestamp = timestamp or datetime.utcnow().isoformat()
 
-    tracking_data = relationship("SatelliteTracking", back_populates="satellite")
-    favorites = relationship("Favorite", back_populates="satellite")
-
-class SatelliteTracking(Base):
-    __tablename__ = "satellite_tracking"
-
-    id = Column(Integer, primary_key=True, index=True)
-    satellite_id = Column(Integer, ForeignKey("satellites.id"))
-    latitude = Column(Float)
-    longitude = Column(Float)
-    altitude = Column(Float)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
-
-    satellite = relationship("Satellite", back_populates="tracking_data")
-
-class Favorite(Base):
-    __tablename__ = "favorites"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    satellite_id = Column(Integer, ForeignKey("satellites.id"))
-
-    satellite = relationship("Satellite", back_populates="favorites")
+class Favorite:
+    def __init__(self, id=None, user_id=None, satellite_id=None):
+        self.id = id
+        self.user_id = user_id
+        self.satellite_id = satellite_id

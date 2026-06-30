@@ -1,8 +1,7 @@
-from typing import Generator
+from typing import Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
@@ -12,7 +11,7 @@ reusable_oauth2 = OAuth2PasswordBearer(
 )
 
 def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
+    db: Any = Depends(get_db), token: str = Depends(reusable_oauth2)
 ) -> User:
     try:
         payload = jwt.decode(
@@ -24,7 +23,17 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    
+    ref = db.reference(f"users/{user_id}")
+    user_data = ref.get()
+    if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+        
+    return User(
+        id=user_data.get("id"),
+        name=user_data.get("name"),
+        email=user_data.get("email"),
+        password_hash=user_data.get("password_hash"),
+        role=user_data.get("role"),
+        created_at=user_data.get("created_at")
+    )
