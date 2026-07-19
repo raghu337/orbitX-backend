@@ -17,6 +17,7 @@ import GlassCard from '../../components/GlassCard';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
 import { BASE_URL } from '../../services/api/orbitxApi';
+import SpaceInfoModal from '../../components/settings/SpaceInfoModal';
 
 const ManifestRow = ({ icon, title, value, onPress, hasChevron = true, children }) => {
   const translateAnim = useRef(new Animated.Value(0)).current;
@@ -76,6 +77,7 @@ const SettingsScreen = ({ navigation }) => {
   });
 
   const [backendConnected, setBackendConnected] = useState(true);
+  const [modalType, setModalType] = useState(null);
 
   useEffect(() => {
     testBackendSync(true);
@@ -113,13 +115,13 @@ const SettingsScreen = ({ navigation }) => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          {navigation.canGoBack() ? (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.text} />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('LiveTracking')}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={28} color="#00E5FF" />
+          </TouchableOpacity>
           <Text style={styles.title}>Settings</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -218,12 +220,12 @@ const SettingsScreen = ({ navigation }) => {
             <ManifestRow 
               icon="shield-check" 
               title="Privacy Policy" 
-              onPress={() => Alert.alert('Secure Protocol', 'Privacy Policy encrypted and active.')} 
+              onPress={() => setModalType('privacy')} 
             />
             <ManifestRow 
               icon="help-circle" 
               title="Help Center" 
-              onPress={() => Alert.alert('Comms Open', 'Help Center channel established.')} 
+              onPress={() => setModalType('help')} 
             />
             <ManifestRow 
               icon="sync" 
@@ -233,7 +235,7 @@ const SettingsScreen = ({ navigation }) => {
             />
           </GlassCard>
         </View>
-
+ 
         <View style={styles.logoutContainer}>
           <NeonButton 
             title="Deorbit (Logout)" 
@@ -242,9 +244,15 @@ const SettingsScreen = ({ navigation }) => {
           />
           <Text style={styles.version}>OrbitX v1.0.4 - Stable Orbit</Text>
         </View>
-
+ 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <SpaceInfoModal 
+        visible={modalType !== null} 
+        onClose={() => setModalType(null)} 
+        type={modalType} 
+      />
     </BackgroundGradient>
   );
 };

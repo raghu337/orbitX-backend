@@ -21,6 +21,7 @@ import GlassCard from '../../components/GlassCard';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS, FONTS, SPACING } from '../../theme/theme';
 import { BASE_URL } from '../../services/api/orbitxApi';
+import SpaceInfoModal from '../../components/settings/SpaceInfoModal';
 
 const MONOSPACE_FONT = Platform.OS === 'ios' ? 'Courier' : 'monospace';
 
@@ -87,6 +88,7 @@ const ProfileScreen = ({ navigation }) => {
   const [adminNotifications, setAdminNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [permissionNotice, setPermissionNotice] = useState(null);
+  const [modalType, setModalType] = useState(null);
 
   const fetchUsers = async () => {
     try {
@@ -260,13 +262,13 @@ const ProfileScreen = ({ navigation }) => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          {navigation.canGoBack() ? (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={28} color={COLORS.text} />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('LiveTracking')}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={28} color="#00E5FF" />
+          </TouchableOpacity>
           <Text style={styles.title}>Settings</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -331,11 +333,11 @@ const ProfileScreen = ({ navigation }) => {
             {/* Notifications Ticker */}
             <View style={styles.tickerContainer}>
               {adminNotifications.length === 0 ? (
-                <Text style={styles.tickerPlaceholder}>> Awaiting registration sync...</Text>
+                <Text style={styles.tickerPlaceholder}>{"> Awaiting registration sync..."}</Text>
               ) : (
                 adminNotifications.map((notif) => (
                   <Text key={notif.id} style={styles.tickerText}>
-                    <Text style={styles.tickerTime}>[{notif.timestamp}]</Text> > Account entered: <Text style={styles.tickerEmail}>{notif.email}</Text>
+                    <Text style={styles.tickerTime}>[{notif.timestamp}]</Text>{" > "}Account entered: <Text style={styles.tickerEmail}>{notif.email}</Text>
                   </Text>
                 ))
               )}
@@ -349,7 +351,7 @@ const ProfileScreen = ({ navigation }) => {
             >
               <View style={styles.directoryContainer}>
                 {registeredUsers.length === 0 ? (
-                  <Text style={styles.tickerPlaceholder}>> No crew members indexed.</Text>
+                  <Text style={styles.tickerPlaceholder}>{'> No crew members indexed.'}</Text>
                 ) : (
                   registeredUsers.map((item) => (
                     <View key={item.id} style={styles.userRow}>
@@ -434,12 +436,12 @@ const ProfileScreen = ({ navigation }) => {
             <ManifestRow 
               icon="shield-check" 
               title="Privacy Policy" 
-              onPress={() => Alert.alert('Secure Protocol', 'Privacy Policy encrypted and active.')} 
+              onPress={() => setModalType('privacy')} 
             />
             <ManifestRow 
               icon="help-circle" 
               title="Help Center" 
-              onPress={() => Alert.alert('Comms Open', 'Help Center channel established.')} 
+              onPress={() => setModalType('help')} 
             />
             <ManifestRow 
               icon="sync" 
@@ -461,6 +463,12 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <SpaceInfoModal 
+        visible={modalType !== null} 
+        onClose={() => setModalType(null)} 
+        type={modalType} 
+      />
     </BackgroundGradient>
   );
 };

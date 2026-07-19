@@ -29,6 +29,7 @@ const BottomTabBar = ({ state, descriptors, navigation }) => {
             else if (route.name === 'Tracker') iconName = isFocused ? 'satellite-variant' : 'satellite-variant';
             else if (route.name === 'Explorer') iconName = isFocused ? 'earth' : 'earth';
             else if (route.name === 'Chat') iconName = isFocused ? 'robot' : 'robot-outline';
+            else if (route.name === 'Launches') iconName = isFocused ? 'rocket' : 'rocket-launch';
             else if (route.name === 'Profile') iconName = isFocused ? 'account' : 'account-outline';
 
             return (

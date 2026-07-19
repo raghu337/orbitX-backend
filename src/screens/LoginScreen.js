@@ -9,7 +9,8 @@ import {
   ScrollView,
   Keyboard,
   TouchableWithoutFeedback,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import BackgroundGradient from '../components/BackgroundGradient';
 import GlassCard from '../components/GlassCard';
@@ -17,6 +18,7 @@ import CustomInput from '../components/CustomInput';
 import NeonButton from '../components/NeonButton';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../theme/theme';
 import { useAuth } from '../hooks/useAuth';
+import { BACKEND_URL, OFFLINE_MODE } from '../services/api/orbitxApi';
 
 const LoginScreen = ({ navigation }) => {
   const { login } = useAuth();
@@ -44,6 +46,48 @@ const LoginScreen = ({ navigation }) => {
     } catch (err) {
       setLoading(false);
       setError(err.userMessage || err.message || 'Login failed');
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    Keyboard.dismiss();
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address to reset your password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (OFFLINE_MODE) {
+        // Simulate network latency in offline mode
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      } else {
+        // Trigger fetch request to the POST /api/auth/forgot-password backend endpoint
+        const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: trimmedEmail }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || 'Failed to send password reset email.');
+        }
+      }
+
+      setLoading(false);
+      Alert.alert(
+        'Password Reset',
+        'A password reset notification has been sent to your registered email address.'
+      );
+    } catch (err) {
+      setLoading(false);
+      setError(err.message || 'Failed to process password reset request.');
     }
   };
 
@@ -92,6 +136,7 @@ const LoginScreen = ({ navigation }) => {
               <TouchableOpacity
                 style={styles.forgotPassword}
                 disabled={loading}
+                onPress={handleForgotPassword}
               >
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>

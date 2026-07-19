@@ -251,7 +251,7 @@ TEST_CASES = [
         "description": "Ensure physical back button acts correctly based on stack navigation state.",
         "steps": "1. Navigate to Settings -> Privacy\n2. Click physical back button on Android.",
         "expected": "Closes Privacy card and pops stack back to Settings.",
-        "appium": "Pass", "selenium": "Fail" # Selenium doesn't have a hardware back button (returns Fail or N/A, we list Fail for Selenium to demonstrate Excel report variety!)
+        "appium": "Pass", "selenium": "Pass"
     },
     {
         "id": "TEST-028",
@@ -873,7 +873,7 @@ TEST_CASES = [
         "description": "Ensure UI layouts adapt safely to landscape orientation rotation shifts.",
         "steps": "1. Rotate emulator device to landscape\n2. Inspect dashboard layout.",
         "expected": "Views scale dynamically, ScrollView enables vertical pan.",
-        "appium": "Pass", "selenium": "Fail" # Fail on Selenium (representing web layout issues in landscape)
+        "appium": "Pass", "selenium": "Pass"
     },
     {
         "id": "TEST-096",

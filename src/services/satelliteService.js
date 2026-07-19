@@ -61,11 +61,39 @@ function createSatelliteFleet() {
     orbitDirection: index % 2 === 0 ? 1 : -1,
   }));
 
+  const AUTHENTIC_NAMES = [
+    "NOAA 19",
+    "NOAA 15",
+    "TIROS-N",
+    "HUBBLE SPACE TELESCOPE",
+    "STARLINK-1013",
+    "STARLINK-1014",
+    "STARLINK-1015",
+    "STARLINK-1016",
+    "STARLINK-1017",
+    "STARLINK-1018",
+    "AQUA",
+    "TERRA",
+    "LANDSAT 8",
+    "ENVISAT",
+    "METOP-A",
+    "COSMOS 2251",
+    "IRIDIUM 33",
+    "SUOMI NPP",
+    "SENTINEL-1A",
+    "SENTINEL-2A",
+    "CALIPSO",
+    "CLOUDSAT",
+    "GOSAT",
+    "FENGYUN-1D",
+    "OERSTED"
+  ];
+
   const simulated = Array.from(
     { length: SIMULATED_SATELLITE_COUNT - liveSats.length },
     (_, index) => ({
       id: `SIM-${index + 1}`,
-      name: `Sat ${index + 1}`,
+      name: AUTHENTIC_NAMES[index % AUTHENTIC_NAMES.length],
       noradId: null,
       color: SIMULATION_COLORS[index % SIMULATION_COLORS.length],
       isLiveSource: false,

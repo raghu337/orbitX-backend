@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "extra": {
       "N2YO_API_KEY": "your_real_n2yo_api_key_here",
-      "OLLAMA_BASE_URL": ""
+      "OLLAMA_BASE_URL": "",
+      "NASA_API_KEY": "H7aer8MLFVxays2eA6t7FCc9uQ7hppIJ9Nh3YCz2"
     },
     "ios": {
       "supportsTablet": true,

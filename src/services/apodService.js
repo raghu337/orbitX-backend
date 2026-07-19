@@ -1,22 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 const APOD_FAVORITES_KEY = '@orbitx_apod_favorites';
 const NASA_APOD_URL = 'https://api.nasa.gov/planetary/apod';
-const DEFAULT_API_KEY = 'DEMO_KEY';
 
-const getApiKey = () => {
-  const extra = (typeof Expo !== 'undefined' && Expo.Constants?.manifest?.extra) || null;
-  const expoConfig = extra || null;
-  const configKey = expoConfig?.NASA_API_KEY || process?.env?.NASA_API_KEY;
-  if (typeof configKey === 'string' && configKey.trim().length > 0) {
-    return configKey.trim();
-  }
-  return DEFAULT_API_KEY;
-};
+const NASA_API_KEY = Constants.expoConfig?.extra?.NASA_API_KEY || 'DEMO_KEY';
 
 const buildApodUrl = (date) => {
-  const apiKey = getApiKey();
-  let url = `${NASA_APOD_URL}?api_key=${encodeURIComponent(apiKey)}`;
+  let url = `${NASA_APOD_URL}?api_key=${encodeURIComponent(NASA_API_KEY)}`;
   if (date) {
     url += `&date=${encodeURIComponent(date)}`;
   }

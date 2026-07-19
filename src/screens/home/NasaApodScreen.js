@@ -9,7 +9,6 @@ import {
     ScrollView,
     ActivityIndicator,
     Share,
-    Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -30,6 +29,14 @@ const formatDate = (date) => {
   return [year, month, day].join('-');
 };
 
+// Safe date offset adjust helper
+const adjustDate = (dateStr, days) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() + days);
+  return formatDate(d);
+};
+
 const FALLBACK_APOD = {
   title: 'Orion Nebula: The Great Stellar Nursery',
   date: formatDate(new Date()),
@@ -42,8 +49,9 @@ const FALLBACK_APOD = {
 
 export default function NasaApodScreen({ navigation }) {
   const [currentDate, setCurrentDate] = useState(() => formatDate(new Date()));
+  const [maxDate, setMaxDate] = useState(() => formatDate(new Date()));
   const [apodData, setApodData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -58,31 +66,67 @@ export default function NasaApodScreen({ navigation }) {
     }
   };
 
-  // Fetch single APOD entry
-  const getApod = useCallback(async (dateString) => {
-    setLoading(true);
+  // Fetch single APOD entry with automatic timezone fallback
+  const fetchNasaApodData = useCallback(async (dateString) => {
+    setIsLoading(true);
     setError(null);
-    try {
-      const data = await fetchAPOD(dateString);
-      setApodData(data);
-    } catch (err) {
-      console.warn('[APOD Screen] Failed to fetch live APOD:', err);
-      setError(err.message || 'API Limit reached or connection failed.');
+
+    let targetDate = dateString;
+    let attempts = 0;
+    const maxAttempts = 3;
+    let dataLoaded = false;
+    let lastError = null;
+
+    while (attempts < maxAttempts && !dataLoaded) {
+      try {
+        const data = await fetchAPOD(targetDate);
+        setApodData(data);
+        dataLoaded = true;
+
+        // If we successfully fetched a previous date, update currentDate and maxDate
+        if (targetDate !== dateString) {
+          setCurrentDate(targetDate);
+          setMaxDate(targetDate);
+        }
+      } catch (err) {
+        console.warn(`[APOD Screen] Failed to fetch for ${targetDate}:`, err);
+        lastError = err;
+
+        const isNoDataError = err.message && (
+          err.message.includes('404') || 
+          err.message.toLowerCase().includes('no data available')
+        );
+
+        if (isNoDataError) {
+          // Go to previous day
+          targetDate = adjustDate(targetDate, -1);
+          attempts++;
+        } else {
+          // Break immediately for other errors (e.g. rate limit, connection)
+          break;
+        }
+      }
+    }
+
+    if (!dataLoaded) {
+      setError(lastError?.message || 'API Limit reached or connection failed.');
       // Use fallback data so the screen remains functional
       setApodData({
         ...FALLBACK_APOD,
         date: dateString,
       });
-    } finally {
-      setLoading(false);
     }
+
+    setIsLoading(false);
   }, []);
 
-  // Initialize and reload when date changes
+  // Initialize and reload when date changes (avoiding redundant fetches)
   useEffect(() => {
-    getApod(currentDate);
+    if (!apodData || apodData.date !== currentDate) {
+      fetchNasaApodData(currentDate);
+    }
     loadFavoritesList();
-  }, [currentDate, getApod]);
+  }, [currentDate, fetchNasaApodData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update favorited state when favorites list or current APOD changes
   useEffect(() => {
@@ -104,23 +148,21 @@ export default function NasaApodScreen({ navigation }) {
 
   // Date step navigations
   const handlePrevDay = () => {
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() - 1);
-    setCurrentDate(formatDate(d));
+    const newDateStr = adjustDate(currentDate, -1);
+    setCurrentDate(newDateStr);
+    fetchNasaApodData(newDateStr);
   };
 
   const handleNextDay = () => {
-    const d = new Date(currentDate);
-    const today = new Date();
-    d.setDate(d.getDate() + 1);
-    if (d <= today) {
-      setCurrentDate(formatDate(d));
-    }
+    if (currentDate >= maxDate) return;
+    const newDateStr = adjustDate(currentDate, 1);
+    setCurrentDate(newDateStr);
+    fetchNasaApodData(newDateStr);
   };
 
   const isToday = useMemo(() => {
-    return currentDate === formatDate(new Date());
-  }, [currentDate]);
+    return currentDate >= maxDate;
+  }, [currentDate, maxDate]);
 
   // Share APOD info
   const handleShare = async () => {
@@ -197,7 +239,7 @@ export default function NasaApodScreen({ navigation }) {
 
         {/* Main Feed */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {loading ? (
+          {isLoading ? (
             <View style={styles.loaderContainer}>
               <ActivityIndicator size="large" color={COLORS.primary} />
               <Text style={styles.loadingText}>Downloading cosmic coordinates...</Text>
@@ -207,7 +249,7 @@ export default function NasaApodScreen({ navigation }) {
               {error && (
                 <View style={styles.errorBanner}>
                   <MaterialCommunityIcons name="alert-circle-outline" size={18} color={COLORS.warning} />
-                  <Text style={styles.errorText}>API Rate Limit Exceeded. Showing offline backup.</Text>
+                  <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
 

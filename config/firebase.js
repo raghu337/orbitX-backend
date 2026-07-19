@@ -4,10 +4,10 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 // Fallback Firebase configuration for OrbitX
 const firebaseConfig = {
   apiKey: "AIzaSyFakeKeyOrbitX123456789",
-  authDomain: "orbitx-firebase.firebaseapp.com",
-  databaseURL: "https://orbitx-firebase-default-rtdb.firebaseio.com",
-  projectId: "orbitx-firebase",
-  storageBucket: "orbitx-firebase.appspot.com",
+  authDomain: "orbit-x-43dc3.firebaseapp.com",
+  databaseURL: "https://orbit-x-43dc3-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "orbit-x-43dc3",
+  storageBucket: "orbit-x-43dc3.appspot.com",
   messagingSenderId: "1234567890",
   appId: "1:1234567890:web:abcdef123456"
 };

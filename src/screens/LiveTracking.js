@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
   ScrollView,
@@ -9,7 +10,8 @@ import {
   Text,
   TouchableOpacity,
   Vibration,
-  View
+  View,
+  useWindowDimensions
 } from 'react-native';
 
 import { Audio } from 'expo-av';
@@ -25,6 +27,7 @@ import gpsService from '../services/gpsService';
 import { requestNotificationPermissions } from '../services/notificationService';
 import satelliteService from '../services/satelliteService';
 import { COLORS, FONTS } from '../theme/theme';
+import { BACKEND_URL } from '../services/api/orbitxApi';
 
 const TACTICAL_SPACE_MAP_STYLE = [
   {
@@ -93,7 +96,30 @@ const SATELLITE_IMAGE = require('../../assets/images/satellite.png');
 const DEFAULT_SATELLITE_IMAGE = SATELLITE_IMAGE; // Fallback to the existing satellite icon when no custom image is available
 const INITIAL_SATELLITES = satelliteService.createSatelliteFleet();
 
-export default function LiveTracking() {
+const getWeatherLocationName = (lat, lon) => {
+  if (typeof lat !== 'number' || typeof lon !== 'number' || Number.isNaN(lat) || Number.isNaN(lon)) {
+    return 'UNKNOWN SECTOR';
+  }
+
+  // Check typical orbital boundaries to detect major regions, continents, and oceans
+  if (lat >= 20 && lat <= 30 && lon >= 70 && lon <= 90) return "Over India / South Asia";
+  if (lat >= 24 && lat <= 50 && lon >= -125 && lon <= -70) return "North America";
+  if (lat >= 35 && lat <= 70 && lon >= -10 && lon <= 40) return "Europe / Mediterranean";
+  if (lat >= -55 && lat <= 12 && lon >= -80 && lon <= -35) return "South America";
+  if (lat >= -35 && lat <= 37 && lon >= -18 && lon <= 51) return "Africa / Middle East";
+  if (lat >= 10 && lat <= 55 && lon >= 90 && lon <= 145) return "East Asia / Pacific Rim";
+  if (lat >= -45 && lat <= -10 && lon >= 112 && lon <= 155) return "Oceania / Australia";
+  if (lat >= -60 && lat <= 60 && lon >= -40 && lon <= -15) return "Atlantic Ocean";
+  if (lat >= -60 && lat <= 60 && ((lon >= -180 && lon <= -125) || (lon >= 145 && lon <= 180))) return "Pacific Ocean";
+  if (lat >= -60 && lat <= 10 && lon >= 40 && lon <= 110) return "Indian Ocean";
+  if (lat < -60) return "Antarctica / Southern Ocean";
+  if (lat > 70) return "Arctic Circle / North Pole";
+
+  return "Global Waters / International Airspace";
+};
+
+export default function LiveTracking({ route, navigation }) {
+  const { height: windowHeight } = useWindowDimensions();
   const mapRef = useRef(null);
   const userLocationRef = useRef({
     latitude: 20,
@@ -114,9 +140,20 @@ export default function LiveTracking() {
   const starFieldAnim = useRef(new Animated.Value(0)).current;
   const nebulaPulseAnim = useRef(new Animated.Value(0)).current;
   const particleAnim = useRef(new Animated.Value(0)).current;
-  const orbitProgressAnim = useRef(new Animated.Value(0)).current;
   const [orbitProgress, setOrbitProgress] = useState(0);
   const popupAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Radar viewport synchronization ────────────────────────────────────────
+  // Animated blip XY offset: mirrors the satellite's delta motion inside the radar circle
+  const radarBlipAnim = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  // Scale pulse for the blip dot (pings when a new satellite is selected or coords change)
+  const radarBlipScaleAnim = useRef(new Animated.Value(1)).current;
+  // Previous satellite coord snapshot used to compute delta offsets each update cycle
+  const prevSatCoordRef = useRef({ latitude: null, longitude: null });
+  // The coordinate the radar circle Marker is currently centered on
+  const radarCenterRef = useRef({ latitude: 20, longitude: 0 });
+  // State drives the actual Marker re-render when the center changes
+  const [radarCenter, setRadarCenter] = useState({ latitude: 20, longitude: 0 });
 
   const [userLocation, setUserLocation] = useState(userLocationRef.current);
   const [gpsStatus, setGpsStatus] = useState('unknown');
@@ -178,6 +215,37 @@ export default function LiveTracking() {
     })
   );
   const [selectedId, setSelectedId] = useState(null);
+
+  useEffect(() => {
+    if (route?.params?.selectedId) {
+      setSelectedId(route.params.selectedId);
+      // Auto-focus on selection if possible
+      const targetSat = satellites.find((s) => s.id === route.params.selectedId);
+      if (targetSat) {
+        setFocusedSatellite(targetSat);
+      }
+    }
+  }, [route?.params?.selectedId, satellites]);
+
+  useEffect(() => {
+    const backAction = () => {
+      if (selectedId || popupOpen || focusedSatellite) {
+        setPopupOpen(false);
+        setSelectedId(null);
+        setFocusedSatellite(null);
+        return true; // Enforces absolute interception
+      }
+      return false; // Allows standard stack goBack if no modal is open
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [popupOpen, selectedId, focusedSatellite, navigation]);
+
   const [focusedSatellite, setFocusedSatellite] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [showOrbitVectors, setShowOrbitVectors] = useState(true);
@@ -189,6 +257,7 @@ export default function LiveTracking() {
   const [heading, setHeading] = useState(135);
   const [satelliteLatitude, setSatelliteLatitude] = useState(0);
   const [satelliteLongitude, setSatelliteLongitude] = useState(0);
+  const [altitude, setAltitude] = useState(420);
 
   const { user } = useAuth() || {};
   const [fullName, setFullName] = useState(user?.name || "Reddy RaghuVardhan");
@@ -267,8 +336,93 @@ export default function LiveTracking() {
     if (activeSatForHUD) {
       setSatelliteLatitude(activeSatForHUD.latitude);
       setSatelliteLongitude(activeSatForHUD.longitude);
+      setAltitude(activeSatForHUD.altitude || 420);
+      setSpeed(activeSatForHUD.velocity ? (activeSatForHUD.velocity * 3600) : 27600);
+      setHeading(activeSatForHUD.heading || 135);
     }
-  }, [activeSatForHUD, activeSatForHUD?.latitude, activeSatForHUD?.longitude]);
+  }, [activeSatForHUD, activeSatForHUD?.latitude, activeSatForHUD?.longitude, activeSatForHUD?.altitude, activeSatForHUD?.velocity, activeSatForHUD?.heading]);
+
+  const speedRef = useRef(speed);
+  const headingRef = useRef(heading);
+  const latRef = useRef(satelliteLatitude);
+  const longitudeRef = useRef(satelliteLongitude);
+  const altitudeRef = useRef(altitude);
+  const activeSatRef = useRef(null);
+
+  useEffect(() => {
+    speedRef.current = speed;
+    headingRef.current = heading;
+    latRef.current = satelliteLatitude;
+    longitudeRef.current = satelliteLongitude;
+    altitudeRef.current = altitude;
+  }, [speed, heading, satelliteLatitude, satelliteLongitude, altitude]);
+
+  useEffect(() => {
+    activeSatRef.current = activeSatForHUD;
+  }, [activeSatForHUD]);
+
+  useEffect(() => {
+    const telemetryTimer = setInterval(() => {
+      const activeSat = activeSatRef.current;
+      if (activeTarget && activeSat) {
+        // Calculate the next values synchronously
+        const currentHeading = headingRef.current;
+        const currentSpeed = speedRef.current;
+        const currentLat = latRef.current;
+        const currentLon = longitudeRef.current;
+
+        const headingRad = (currentHeading * Math.PI) / 180;
+        const distancePerSec = currentSpeed / 3600;
+        
+        // Latitude update
+        const dLat = (distancePerSec / 111) * Math.cos(headingRad);
+        let nextLat = currentLat + dLat;
+        if (nextLat > 85) nextLat = -85;
+        if (nextLat < -85) nextLat = 85;
+
+        // Longitude update
+        const latRad = (currentLat * Math.PI) / 180;
+        const cosLat = Math.max(0.1, Math.cos(latRad));
+        const dLon = (distancePerSec / (111 * cosLat)) * Math.sin(headingRad);
+        let nextLon = currentLon + dLon;
+        if (nextLon > 180) nextLon -= 360;
+        if (nextLon < -180) nextLon += 360;
+
+        // Speed, Altitude, Heading updates
+        const nextSpeed = currentSpeed + (Math.random() - 0.5) * 4;
+        const nextAltitude = altitudeRef.current + (Math.random() - 0.5) * 1;
+        const nextHeading = (currentHeading + (Math.random() - 0.5) * 2 + 360) % 360;
+
+        // Update state variables
+        setSatelliteLatitude(nextLat);
+        setSatelliteLongitude(nextLon);
+        setSpeed(nextSpeed);
+        setAltitude(nextAltitude);
+        setHeading(nextHeading);
+
+        // Update the satellites array so map marker and radar viewport move
+        setSatellites((prevSats) =>
+          prevSats.map((sat) => {
+            if (sat.id === activeSat.id) {
+              return {
+                ...sat,
+                latitude: nextLat,
+                longitude: nextLon,
+                altitude: nextAltitude,
+                velocity: nextSpeed / 3600,
+                heading: nextHeading,
+              };
+            }
+            return sat;
+          })
+        );
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(telemetryTimer);
+    };
+  }, [activeTarget]);
 
   const selectedSatellite = useMemo(
     () => satellites.find((sat) => sat.id === selectedId) ?? null,
@@ -796,24 +950,11 @@ export default function LiveTracking() {
   }, [radarSweepAnim, radarGlowAnim, satelliteFlashAnim, starFieldAnim, nebulaPulseAnim, particleAnim]);
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(orbitProgressAnim, {
-        toValue: 1,
-        duration: 12000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, [orbitProgressAnim]);
-
-  useEffect(() => {
-    const listenerId = orbitProgressAnim.addListener(({ value }) => {
-      setOrbitProgress(value);
-    });
-    return () => {
-      orbitProgressAnim.removeListener(listenerId);
-    };
-  }, [orbitProgressAnim]);
+    const interval = setInterval(() => {
+      setOrbitProgress((Date.now() % 12000) / 12000);
+    }, 250);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     Animated.timing(popupAnim, {
@@ -1105,8 +1246,6 @@ export default function LiveTracking() {
   }, [loadAlertSound, startLocationWatch]);
 
   useEffect(() => {
-    if (!liveLocationActive) return;
-
     const interval = setInterval(() => {
       fetchLivePositions().catch((error) =>
         console.warn('[LiveTracking] periodic fetch failed', error)
@@ -1114,7 +1253,75 @@ export default function LiveTracking() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [liveLocationActive, fetchLivePositions]);
+  }, [fetchLivePositions]);
+
+  const fetchLatestNoaaData = useCallback(async () => {
+    try {
+      const url = `${BACKEND_URL}/api/v1/satellites/n2yo-positions?ids=33591&lat=15.5049&lng=77.3757`;
+      const response = await fetch(url, {
+        headers: {
+          'bypass-tunnel-reminder': 'true'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const noaa = data[0];
+          setSatellites((prev) =>
+            prev.map((s) => {
+              if (s.id === 'NOAA') {
+                return {
+                  ...s,
+                  latitude: noaa.latitude,
+                  longitude: noaa.longitude,
+                  altitude: noaa.altitude,
+                  velocity: noaa.velocity || 7.45,
+                  visibility: noaa.visibility,
+                  isLive: true,
+                };
+              }
+              return s;
+            })
+          );
+          if (activeSatRef.current?.id === 'NOAA') {
+            if (noaa.latitude) setSatelliteLatitude(noaa.latitude);
+            if (noaa.longitude) setSatelliteLongitude(noaa.longitude);
+            if (noaa.velocity) {
+              setSpeed(noaa.velocity * 3600);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      setSatellites((prev) =>
+        prev.map((s) => {
+          if (s.id === 'NOAA') {
+            const nextAlt = s.altitude ? s.altitude + (Math.random() - 0.5) * 2 : 870;
+            const nextVel = s.velocity ? s.velocity + (Math.random() - 0.5) * 0.01 : 7.45;
+            return {
+              ...s,
+              altitude: nextAlt,
+              velocity: nextVel,
+            };
+          }
+          return s;
+        })
+      );
+      if (activeSatRef.current?.id === 'NOAA') {
+        setSpeed((prev) => {
+          const change = (Math.random() - 0.5) * 5;
+          return prev + change;
+        });
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLatestNoaaData();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [fetchLatestNoaaData]);
 
   useEffect(() => {
     if (!focusedSatellite) return;
@@ -1307,16 +1514,12 @@ export default function LiveTracking() {
   }, [focusedSatellite]);
 
   useEffect(() => {
-    if (!followSatellite || !focusedSatellite) return;
-
-    const interval = setInterval(() => {
+    if (followSatellite && focusedSatellite) {
       const activeSat = satellites.find((sat) => sat.id === focusedSatellite.id);
       if (activeSat) {
         centerOnSatellite(activeSat);
       }
-    }, 1000);
-
-    return () => clearInterval(interval);
+    }
   }, [followSatellite, focusedSatellite, satellites, centerOnSatellite]);
 
   const handleSelectSatellite = useCallback(
@@ -1331,6 +1534,8 @@ export default function LiveTracking() {
 
       centerOnSatellite(sat);
       setIsTrackingSatellite(true);
+      setFollowSatellite(true);
+      setFollowUser(false);
       setTimeout(() => {
         if (lastFocusedSatelliteIdRef.current === sat.id) {
           setPopupOpen(true);
@@ -1352,12 +1557,98 @@ export default function LiveTracking() {
     setSelectedId(null);
     setFocusedSatellite(null);
     setPopupOpen(false);
+    setFollowSatellite(false);
+    setFollowUser(true);
   }, []);
 
   const activeSatForHUD = selectedSatellite || satellites.find((s) => s.id === 'ISS') || satellites[0] || null;
 
+  // ── Radar center synchronization effect ───────────────────────────────────
+  // Fires whenever the selected satellite's coordinates change (or selection clears).
+  // Moves the radar Marker to follow the satellite and animates the inner blip offset
+  // by projecting the lat/lon delta into a local pixel-space offset (±30 px max).
+  useEffect(() => {
+    if (!selectedSatellite) {
+      // Fallback: center radar on user location when nothing is selected
+      const fallback = {
+        latitude: userLocationRef.current.latitude,
+        longitude: userLocationRef.current.longitude,
+      };
+      radarCenterRef.current = fallback;
+      setRadarCenter(fallback);
+      // Reset blip to center with a smooth spring
+      Animated.spring(radarBlipAnim, {
+        toValue: { x: 0, y: 0 },
+        friction: 6,
+        tension: 80,
+        useNativeDriver: true,
+      }).start();
+      prevSatCoordRef.current = { latitude: null, longitude: null };
+      return;
+    }
+
+    const { latitude, longitude } = selectedSatellite;
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
+
+    // 1) Update the radar Marker center to follow the satellite
+    const newCenter = { latitude, longitude };
+    radarCenterRef.current = newCenter;
+    setRadarCenter(newCenter);
+
+    // 2) Compute the delta from the previous known position
+    const prev = prevSatCoordRef.current;
+    if (prev.latitude !== null && prev.longitude !== null) {
+      // Scale factor: 1 degree ≈ 111 km; radar circle is 120 px wide → cap at ±30 px
+      const SCALE = 30 / 5; // 5° of movement fills the radar radius
+      const rawDx = (longitude - prev.longitude) * SCALE;
+      const rawDy = -(latitude - prev.latitude) * SCALE; // screen Y is inverted
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+      const dx = clamp(rawDx, -30, 30);
+      const dy = clamp(rawDy, -30, 30);
+
+      // 3) Animate blip to the new offset with a smooth spring
+      Animated.spring(radarBlipAnim, {
+        toValue: { x: dx, y: dy },
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }).start();
+
+      // 4) Trigger a quick scale ping on the blip
+      Animated.sequence([
+        Animated.timing(radarBlipScaleAnim, {
+          toValue: 1.8,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.spring(radarBlipScaleAnim, {
+          toValue: 1,
+          friction: 5,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    prevSatCoordRef.current = { latitude, longitude };
+  }, [
+    selectedSatellite,
+    selectedSatellite?.latitude,
+    selectedSatellite?.longitude,
+    radarBlipAnim,
+    radarBlipScaleAnim,
+  ]);
+
+  const displayLocation = selectedSatellite
+    ? getWeatherLocationName(selectedSatellite.latitude, selectedSatellite.longitude)
+    : "GLOBAL MONITORING ACTIVE";
+
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={{ flexGrow: 1 }}
+      style={{ width: '100%', minHeight: '100%', backgroundColor: '#000' }}
+    >
+      <View style={[styles.container, { minHeight: '100%', width: '100%' }]}>
       <View style={styles.statusBar}>
         <View>
           <Text style={styles.statusText}>
@@ -1395,6 +1686,7 @@ export default function LiveTracking() {
         mapType="hybrid"
         style={[
           styles.map,
+          { height: windowHeight },
           alertState.active && alertState.level >= 3 && styles.mapAlert,
         ]}
         initialRegion={{
@@ -1413,12 +1705,56 @@ export default function LiveTracking() {
         pitchEnabled={true}
         showsUserLocation={true}
         onPress={handleMapPress}
+        onPanDrag={() => {
+          setFollowUser(false);
+          setFollowSatellite(false);
+        }}
         onMapReady={() =>
           console.log('[LiveTracking] Map ready', !!mapRef.current)
         }
       >
+        {/* ── Static user location marker (gold pulse dot) ───────────────── */}
         <Marker key="user-location" coordinate={userLocation}>
           <View style={styles.userMarkerWrapper}>
+            <Animated.View
+              style={[
+                styles.userPulse,
+                {
+                  transform: [{ scale: pulseAnim }],
+                },
+              ]}
+            />
+            <View style={styles.userDot} />
+          </View>
+        </Marker>
+
+        {/* ── Dynamic radar viewport: follows the selected satellite ─────── */}
+        <Marker
+          key="radar-viewport"
+          coordinate={radarCenter}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={true}
+        >
+          {/* ── Blue tracking circle: satellite icon nested directly inside ── */}
+          <View
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              borderWidth: 2,
+              borderColor: '#38bdf8',
+              justifyContent: 'center',
+              alignItems: 'center',
+              position: 'absolute',
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              shadowColor: '#38bdf8',
+              shadowOpacity: 0.7,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 0 },
+              elevation: 10,
+            }}
+          >
+            {/* Rotating sweep wedge */}
             <Animated.View
               style={[
                 styles.userRadarSweep,
@@ -1434,55 +1770,80 @@ export default function LiveTracking() {
                 },
               ]}
             >
-              <View style={styles.radarWedge} />
+              <View
+                style={[
+                  styles.radarWedge,
+                  selectedSatellite && { backgroundColor: 'rgba(56, 189, 248, 0.25)' },
+                ]}
+              />
             </Animated.View>
-            <Animated.View
-              style={[
-                styles.userRadarCircle,
-                {
+
+            {/* Crosshair H */}
+            <View style={styles.radarCrosshairH} />
+            {/* Crosshair V */}
+            <View style={styles.radarCrosshairV} />
+
+            {/* ── Active satellite icon rendered INSIDE the blue circle ──── */}
+            {selectedSatellite ? (
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  justifyContent: 'center',
+                  alignItems: 'center',
                   transform: [
-                    {
-                      scale: radarGlowAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.9, 1.35],
-                      }),
-                    },
+                    { translateX: radarBlipAnim.x },
+                    { translateY: radarBlipAnim.y },
+                    { scale: radarBlipScaleAnim },
                   ],
-                  opacity: radarGlowAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0.18, 0.45, 0.18],
-                  }),
-                },
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.userRadarCircleSmall,
-                {
-                  transform: [
-                    {
-                      scale: radarGlowAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.7, 1.2],
-                      }),
-                    },
-                  ],
-                  opacity: radarGlowAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0.1, 0.28, 0.1],
-                  }),
-                },
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.userPulse,
-                {
-                  transform: [{ scale: pulseAnim }],
-                },
-              ]}
-            />
-            <View style={styles.userDot} />
+                }}
+              >
+                {/* Glow halo behind the icon */}
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: 'rgba(0, 229, 255, 0.3)',
+                    transform: [{ scale: radarBlipScaleAnim }],
+                    opacity: radarBlipScaleAnim.interpolate({
+                      inputRange: [1, 1.8],
+                      outputRange: [0.6, 0.0],
+                    }),
+                  }}
+                />
+                {/* Satellite icon — the actual target rendered inside the circle */}
+                <MaterialCommunityIcons
+                  name="satellite-variant"
+                  size={18}
+                  color="#00E5FF"
+                  style={{
+                    textShadowColor: 'rgba(0, 229, 255, 0.9)',
+                    textShadowRadius: 8,
+                    textShadowOffset: { width: 0, height: 0 },
+                  }}
+                />
+                {/* Satellite name tag below icon */}
+                <Text
+                  style={{
+                    color: '#00E5FF',
+                    fontSize: 7,
+                    fontWeight: '900',
+                    letterSpacing: 0.8,
+                    marginTop: 2,
+                    textShadowColor: 'rgba(0,0,0,0.8)',
+                    textShadowRadius: 3,
+                    textShadowOffset: { width: 0, height: 1 },
+                  }}
+                  numberOfLines={1}
+                >
+                  {selectedSatellite.name?.split(' ')[0]?.toUpperCase() ?? ''}
+                </Text>
+              </Animated.View>
+            ) : (
+              /* Idle state: small center dot when no target locked */
+              <View style={styles.radarCenterDot} />
+            )}
           </View>
         </Marker>
 
@@ -1564,58 +1925,81 @@ export default function LiveTracking() {
             return sat.name || 'Sat';
           })();
 
+          const displayLat = isSelected && selectedOrbitPoint ? selectedOrbitPoint.latitude : sat.latitude;
+          const displayLon = isSelected && selectedOrbitPoint ? selectedOrbitPoint.longitude : sat.longitude;
+
           return (
             <Marker
               key={sat.id}
               coordinate={{
-                latitude: sat.latitude,
-                longitude: sat.longitude,
+                latitude: displayLat,
+                longitude: displayLon,
               }}
               onPress={() => {
                 animateSatelliteTap(sat.id);
                 handleSelectSatellite(sat);
               }}
             >
-              <Animated.View
-                style={[
-                  styles.satelliteMarkerWrapper,
-                  {
-                    transform: [
-                      { scale: isSelected ? pulseAnim : 1 },
-                      { scale: isTapped ? tapScaleAnim : 1 },
-                    ],
-                  },
-                  isSelected && styles.markerSelected,
-                ]}
+              <View
+                style={{
+                  position: 'absolute',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <View
+                {selectedId === sat.id && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      borderWidth: 2,
+                      borderColor: '#38bdf8',
+                    }}
+                  />
+                )}
+                <Animated.View
                   style={[
-                    styles.satelliteGlow,
+                    styles.satelliteMarkerWrapper,
                     {
-                      backgroundColor: glowColor,
-                      shadowColor: markerColor,
+                      transform: [
+                        { scale: isSelected ? pulseAnim : 1 },
+                        { scale: isTapped ? tapScaleAnim : 1 },
+                      ],
                     },
+                    isSelected && styles.markerSelected,
                   ]}
-                />
-                <MaterialCommunityIcons
-                  name="satellite-variant"
-                  size={24}
-                  color={markerColor}
-                />
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: '#FFFFFF',
-                    fontWeight: 'bold',
-                    marginTop: 2,
-                    textShadowColor: 'rgba(0,0,0,0.75)',
-                    textShadowRadius: 3,
-                    textShadowOffset: { width: -1, height: 1 },
-                    textAlign: 'center',
-                  }}
                 >
-                  {shortName}
-                </Text>
+                  <View
+                    style={[
+                      styles.satelliteGlow,
+                      {
+                        backgroundColor: glowColor,
+                        shadowColor: markerColor,
+                      },
+                    ]}
+                  />
+                  <MaterialCommunityIcons
+                    name="satellite-variant"
+                    size={24}
+                    color={markerColor}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      color: '#FFFFFF',
+                      fontWeight: 'bold',
+                      marginTop: 2,
+                      textShadowColor: 'rgba(0,0,0,0.75)',
+                      textShadowRadius: 3,
+                      textShadowOffset: { width: -1, height: 1 },
+                      textAlign: 'center',
+                    }}
+                  >
+                    {shortName}
+                  </Text>
+                </Animated.View>
                 {alertingSatelliteId === sat.id && (
                   <Animated.View
                     style={[
@@ -1627,7 +2011,7 @@ export default function LiveTracking() {
                     ]}
                   />
                 )}
-              </Animated.View>
+              </View>
             </Marker>
           );
         })}
@@ -1753,7 +2137,12 @@ export default function LiveTracking() {
       {activeSatForHUD && (
         <View style={styles.hudContainer}>
           <View style={styles.bottom}>
-            <Text style={styles.bottomTitle}>Live Satellite Fleet</Text>
+            <View style={styles.bottomHeader}>
+              <Text style={{ color: '#38bdf8', fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4, letterSpacing: 1 }}>
+                🌍 POSITION: {displayLocation}
+              </Text>
+              <Text style={styles.bottomTitle}>Live Satellite Fleet</Text>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardList}>
               {satellites.map((sat) => (
                 <TouchableOpacity
@@ -1791,7 +2180,7 @@ export default function LiveTracking() {
             <View style={styles.hudGrid}>
               <View style={styles.hudGridCol}>
                 <Text style={styles.hudGridLabel}>ALTITUDE</Text>
-                <Text style={styles.hudGridValue}>{(activeSatForHUD.altitude || 0).toFixed(0)} KM</Text>
+                <Text style={styles.hudGridValue}>{(altitude || 0).toFixed(0)} KM</Text>
               </View>
               <View style={styles.hudGridCol}>
                 <Text style={styles.hudGridLabel}>SPEED</Text>
@@ -1831,24 +2220,6 @@ export default function LiveTracking() {
 
             <View style={styles.hudDivider} />
 
-            {/* Personnel & Vessel Comms */}
-            <View style={styles.hudInfoRow}>
-              <Text style={styles.hudInfoLabel}>FULL NAME:</Text>
-              <Text style={styles.hudInfoValue}>{activeTarget.fullName}</Text>
-            </View>
-            <View style={styles.hudInfoRow}>
-              <Text style={styles.hudInfoLabel}>VESSEL EMAIL:</Text>
-              <Text style={styles.hudInfoValue}>{activeTarget.vesselEmail}</Text>
-            </View>
-            <View style={styles.hudInfoRow}>
-              <Text style={styles.hudInfoLabel}>MISSION STATUS:</Text>
-              <Text style={[styles.hudInfoValue, { color: '#22C55E' }]}>
-                {activeTarget.missionStatus}
-              </Text>
-            </View>
-
-            <View style={styles.hudDivider} />
-
             {/* Live Ticker */}
             <View style={styles.hudTickerRow}>
               <Text style={styles.hudTickerLabel}>LIVE FLEET FEED // </Text>
@@ -1869,6 +2240,8 @@ export default function LiveTracking() {
           style={styles.resetCameraButton}
           onPress={() => {
             setIsTrackingSatellite(false);
+            setFollowSatellite(false);
+            setFollowUser(true);
             if (userLocation) {
               centerOnUserLocation(userLocation);
             }
@@ -1923,7 +2296,8 @@ export default function LiveTracking() {
 
 
 
-    </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -1932,7 +2306,7 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   hudContainer: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 50,
     left: 0,
     right: 0,
     overflow: 'hidden',
@@ -2059,7 +2433,7 @@ const styles = StyleSheet.create({
   floatingControls: {
     position: 'absolute',
     right: 16,
-    top: 320,
+    bottom: '36%',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
@@ -2124,24 +2498,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // ── Radar viewport marker ──────────────────────────────────────────────────
+  radarViewportWrapper: {
+    width: 130,
+    height: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   userRadarSweep: {
     position: 'absolute',
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 1.5,
-    borderColor: 'rgba(212, 175, 55, 0.26)',
+    borderColor: 'rgba(0, 229, 255, 0.26)',
     overflow: 'hidden',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.02)',
+    backgroundColor: 'rgba(0, 229, 255, 0.02)',
   },
   radarWedge: {
     position: 'absolute',
     right: 0,
     width: 60,
     height: 120,
-    backgroundColor: 'rgba(212, 175, 55, 0.18)',
+    backgroundColor: 'rgba(0, 229, 255, 0.18)',
     borderTopRightRadius: 60,
     borderBottomRightRadius: 60,
   },
@@ -2150,32 +2531,85 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    backgroundColor: 'rgba(0, 229, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.25)',
+    borderColor: 'rgba(0, 229, 255, 0.25)',
+  },
+  radarCircleActive: {
+    borderColor: 'rgba(0, 229, 255, 0.55)',
+    backgroundColor: 'rgba(0, 229, 255, 0.10)',
   },
   userRadarCircleSmall: {
     position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: 'rgba(0, 229, 255, 0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: 'rgba(0, 229, 255, 0.2)',
   },
+  radarCircleSmallActive: {
+    borderColor: 'rgba(0, 229, 255, 0.45)',
+  },
+  radarCrosshairH: {
+    position: 'absolute',
+    width: 100,
+    height: 1,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+  },
+  radarCrosshairV: {
+    position: 'absolute',
+    width: 1,
+    height: 100,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+  },
+  radarCenterDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(0, 229, 255, 0.5)',
+  },
+  // ── Satellite blip indicator ───────────────────────────────────────────────
+  radarBlipWrapper: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarBlipGlow: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 229, 255, 0.4)',
+  },
+  radarBlipDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#00E5FF',
+    borderWidth: 1,
+    borderColor: '#fff',
+    shadowColor: '#00E5FF',
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  // ── User location (simplified — radar is now separate) ────────────────────
   userPulse: {
     position: 'absolute',
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(212, 175, 55, 0.24)',
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.4)',
   },
   userDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#D4AF37',
     borderWidth: 2,
     borderColor: '#fff',
@@ -2441,6 +2875,14 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
   },
+  alertRing: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#FF4D4D',
+  },
   satelliteGlow: {
     position: 'absolute',
     width: 54,
@@ -2553,12 +2995,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1.5,
     borderColor: 'rgba(0, 229, 255, 0.35)',
   },
+  bottomHeader: {
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
   bottomTitle: {
     color: '#8ce3ff',
     fontSize: 14,
     fontWeight: '700',
-    paddingHorizontal: 16,
-    paddingTop: 14,
     paddingBottom: 8,
   },
   cardList: {
@@ -2590,7 +3035,7 @@ const styles = StyleSheet.create({
   },
   resetCameraButton: {
     position: 'absolute',
-    top: 250,
+    bottom: '48%',
     right: 16,
     zIndex: 101,
     overflow: 'hidden',

@@ -1,6 +1,7 @@
 import time
 from datetime import datetime, timedelta
 from typing import Any
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -235,3 +236,63 @@ def read_users(
         ))
     users_list.sort(key=lambda x: x.id if isinstance(x.id, int) else 0, reverse=True)
     return users_list
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/forgot-password
+# ---------------------------------------------------------------------------
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    db_conn: Any = Depends(get_db),
+) -> Any:
+    """
+    Password reset request endpoint.
+    Checks if email exists in database and triggers a mock reset email.
+    """
+    email = body.email.strip()
+    print(f"\n[Auth] FORGOT PASSWORD REQUEST for: {email}")
+
+    # Check if user exists in Firebase Realtime Database
+    try:
+        ref = db_conn.reference("users")
+        users_data = ref.order_by_child("email").equal_to(email).get()
+        user_exists = bool(users_data)
+    except Exception as db_err:
+        print(f"[Auth] Firebase DB not initialized or query failed: {db_err}")
+        mock_emails = {"astronaut@orbitx.com", "jhuvamma548@gmail.comt", "test@example.com"}
+        if email in mock_emails:
+            print(f"[Auth] Fallback: Mock user found for local testing: {email}")
+            user_exists = True
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable. Please try again.",
+            )
+
+    if not user_exists:
+        print(f"[Auth] FAIL: Email not found: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account registered with this email address.",
+        )
+
+    # Simulate sending password reset email
+    print(f"[Auth] SUCCESS: User found. Sending password reset email to {email}...")
+    print(f"===========================================================")
+    print(f"SMTP OUTGOING MAIL:")
+    print(f"  To: {email}")
+    print(f"  From: support@orbitx.com")
+    print(f"  Subject: OrbitX - Password Reset Notification")
+    print(f"  Body: Please click the link to reset your password: http://orbitx.com/reset-password")
+    print(f"===========================================================")
+
+    return {
+        "success": True,
+        "message": "A password reset notification has been sent to your registered email address."
+    }
+

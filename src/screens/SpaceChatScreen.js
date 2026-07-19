@@ -242,16 +242,25 @@ const SpaceChatScreen = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <MaterialCommunityIcons
-            name="robot-happy"
-            size={28}
-            color="#00D9FF"
-            style={{ marginRight: 8 }}
-          />
-          <View>
-            <Text style={styles.headerTitle}>Space Assistant</Text>
-            <Text style={styles.headerSubtitle}>Powered by AI</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => navigation.openDrawer && navigation.openDrawer()}
+            style={styles.burgerButton}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="menu" size={22} color="#00E5FF" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <MaterialCommunityIcons
+              name="robot-happy"
+              size={28}
+              color="#00D9FF"
+              style={{ marginRight: 8 }}
+            />
+            <View>
+              <Text style={styles.headerTitle}>Space Assistant</Text>
+              <Text style={styles.headerSubtitle}>Powered by AI</Text>
+            </View>
           </View>
         </View>
         <TouchableOpacity
@@ -412,6 +421,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 217, 255, 0.1)',
+  },
+  burgerButton: {
+    marginRight: 10,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 217, 255, 0.05)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 217, 255, 0.15)',
   },
   headerContent: {
     flexDirection: 'row',

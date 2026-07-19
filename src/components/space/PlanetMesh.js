@@ -26,7 +26,7 @@ export const PLANET_TEXTURES = {
 const TEXTURE_CACHE = {};
 const SPECULAR_CACHE = {};
 
-const EarthMaterial = ({ phongProps }) => {
+const EarthMaterial = ({ phongProps, planet }) => {
   const [specularMap, setSpecularMap] = useState(() => SPECULAR_CACHE['earth'] || null);
 
   useEffect(() => {
@@ -55,7 +55,14 @@ const EarthMaterial = ({ phongProps }) => {
     }
   }, []);
 
-  return <meshPhongMaterial {...phongProps} specularMap={specularMap} />;
+  return (
+    <meshPhongMaterial
+      {...phongProps}
+      color={planet?.color || '#3b82f6'}
+      specularMap={specularMap}
+      attach="material"
+    />
+  );
 };
 
 const PlanetMesh = ({
@@ -72,46 +79,68 @@ const PlanetMesh = ({
 }) => {
   const pivotRef = useRef();
   const groupRef = useRef();
+  const meshRef = useRef();
   const scanRingRef = useRef();
   const phobosRef = useRef();
   const deimosRef = useRef();
 
-  const [texture, setTexture] = useState(() => TEXTURE_CACHE[planet.id] || null);
+  const startTimeRef = useRef(performance.now());
+  const lastTimeRef = useRef(performance.now());
+
+  const [texture, setTexture] = useState(() => {
+    try {
+      return (planet?.id && TEXTURE_CACHE[planet.id]) || null;
+    } catch (_e) {
+      return null;
+    }
+  });
 
   // Load planet textures with global caching to prevent render crashes or network delays
   useEffect(() => {
     if (!planet || !planet.id) return;
-    if (TEXTURE_CACHE[planet.id]) {
-      setTexture(TEXTURE_CACHE[planet.id]);
-      return;
-    }
-
-    const textureSource = PLANET_TEXTURES[planet.id];
-    if (!textureSource) return;
-
     try {
+      if (TEXTURE_CACHE[planet.id]) {
+        setTexture(TEXTURE_CACHE[planet.id]);
+        return;
+      }
+
+      const textureSource = PLANET_TEXTURES[planet.id];
+      if (!textureSource) {
+        setTexture(null);
+        return;
+      }
+
       const loader = new TextureLoader();
       loader.load(
         textureSource,
         (tex) => {
-          if (tex) {
-            tex.generateMipmaps = false;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.colorSpace = THREE.SRGBColorSpace;
-            TEXTURE_CACHE[planet.id] = tex;
-            setTexture(tex);
+          try {
+            if (tex) {
+              tex.generateMipmaps = false;
+              tex.minFilter = THREE.LinearFilter;
+              tex.magFilter = THREE.LinearFilter;
+              tex.colorSpace = THREE.SRGBColorSpace;
+              TEXTURE_CACHE[planet.id] = tex;
+              setTexture(tex);
+            } else {
+              setTexture(null);
+            }
+          } catch (callbackErr) {
+            console.warn(`Error processing loaded texture for ${planet.id}:`, callbackErr);
+            setTexture(null);
           }
         },
         undefined,
         (err) => {
           console.warn(`Failed to async load texture for ${planet.id}:`, err);
+          setTexture(null);
         }
       );
     } catch (e) {
       console.warn(`Failed to resolve asset texture for ${planet.id}:`, e);
+      setTexture(null);
     }
-  }, [planet.id]);
+  }, [planet?.id]);
 
   // Set initial orbital position angle
   useEffect(() => {
@@ -146,49 +175,61 @@ const PlanetMesh = ({
     return positions;
   }, [scale]);
 
-  useFrame((state, delta) => {
-    // 1. Pivot rotation (revolution around the Sun)
-    if (pivotRef && pivotRef.current) {
-      pivotRef.current.rotation.y += orbitSpeed * delta;
-    }
-    
-    // 2. Planet rotation (spin) and position tracking
-    if (planet && groupRef && groupRef.current) {
-      groupRef.current.rotation.y += rotationSpeed * delta;
+  useFrame(() => {
+    try {
+      const now = performance.now();
+      const delta = Math.min(0.1, (now - lastTimeRef.current) / 1000.0);
+      lastTimeRef.current = now;
+      const time = (now - startTimeRef.current) / 1000.0;
 
-      // Save world position in shared reference
-      if (planetPositionsRef && planetPositionsRef.current) {
-        const worldPos = new THREE.Vector3();
-        groupRef.current.getWorldPosition(worldPos);
-        planetPositionsRef.current[planet.id] = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+      // 1. Pivot rotation (revolution around the Sun)
+      if (pivotRef && pivotRef.current) {
+        pivotRef.current.rotation.y += (orbitSpeed || 0.01) * delta;
       }
-    }
+      
+      // 2. Planet rotation (spin) and position tracking
+      if (planet && groupRef && groupRef.current) {
+        groupRef.current.rotation.y += (rotationSpeed || 0.02) * delta;
 
-    // 3. Animate 3D scanning ring
-    if (isScanning && scanRingRef && scanRingRef.current) {
-      const time = state.clock.getElapsedTime();
-      scanRingRef.current.position.y = Math.sin(time * 6) * scale;
-    }
+        // Save world position in shared reference
+        if (planetPositionsRef && planetPositionsRef.current) {
+          const worldPos = new THREE.Vector3();
+          groupRef.current.getWorldPosition(worldPos);
+          planetPositionsRef.current[planet.id] = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+        }
+      }
 
-    // 4. Animate Phobos & Deimos if this is Mars
-    if (planet && planet.id === 'mars') {
-      const time = state.clock.getElapsedTime();
-      if (phobosRef && phobosRef.current) {
-        const phobosAngle = time * 2.2;
-        phobosRef.current.position.set(
-          Math.cos(phobosAngle) * scale * 1.6,
-          0,
-          Math.sin(phobosAngle) * scale * 1.6
-        );
+      // Ensure calculated delta is directly applied to the planet mesh's Y-axis rotation
+      if (meshRef && meshRef.current) {
+        meshRef.current.rotation.y += (planet.speed || planet.orbitSpeed || 0.01) * delta;
       }
-      if (deimosRef && deimosRef.current) {
-        const deimosAngle = time * 1.0;
-        deimosRef.current.position.set(
-          Math.cos(deimosAngle) * scale * 2.3,
-          0,
-          Math.sin(deimosAngle) * scale * 2.3
-        );
+
+      // 3. Animate 3D scanning ring
+      if (isScanning && scanRingRef && scanRingRef.current) {
+        scanRingRef.current.position.y = Math.sin(time * 6) * scale;
       }
+
+      // 4. Animate Phobos & Deimos if this is Mars
+      if (planet && planet.id === 'mars') {
+        if (phobosRef && phobosRef.current) {
+          const phobosAngle = time * 2.2;
+          phobosRef.current.position.set(
+            Math.cos(phobosAngle) * scale * 1.6,
+            0,
+            Math.sin(phobosAngle) * scale * 1.6
+          );
+        }
+        if (deimosRef && deimosRef.current) {
+          const deimosAngle = time * 1.0;
+          deimosRef.current.position.set(
+            Math.cos(deimosAngle) * scale * 2.3,
+            0,
+            Math.sin(deimosAngle) * scale * 2.3
+          );
+        }
+      }
+    } catch (e) {
+      console.warn(`Error animating planet mesh ${planet?.id}:`, e);
     }
   });
 
@@ -245,7 +286,7 @@ const PlanetMesh = ({
   }
 
   const standardProps = {
-    color: planet.color || '#FFFFFF',
+    color: planet?.color || '#3b82f6',
     map: texture || null,
     roughness: roughness,
     metalness: metalness,
@@ -254,7 +295,7 @@ const PlanetMesh = ({
   };
 
   const phongProps = {
-    color: planet.color || '#FFFFFF',
+    color: planet?.color || '#3b82f6',
     map: texture || null,
     specular: new THREE.Color('#1A3B8B'),
     shininess: 30,
@@ -270,8 +311,14 @@ const PlanetMesh = ({
       >
         {/* Planet sphere mesh with direct gesture responder */}
         <mesh 
+          ref={meshRef}
           castShadow 
           receiveShadow
+          scale={[
+            planet?.radius ? planet.radius * 2 : 2,
+            planet?.radius ? planet.radius * 2 : 2,
+            planet?.radius ? planet.radius * 2 : 2
+          ]}
           onPointerDown={(event) => {
             event.stopPropagation();
             if (onSelectBody) {
@@ -289,11 +336,15 @@ const PlanetMesh = ({
             }
           }}
         >
-          <sphereGeometry args={[scale, 24, 24]} />
+          <sphereGeometry args={[planet?.radius || 1, 32, 32]} />
           {isEarth ? (
-            <EarthMaterial phongProps={phongProps} />
+            <EarthMaterial phongProps={phongProps} planet={planet} />
           ) : (
-            <meshStandardMaterial {...standardProps} />
+            <meshStandardMaterial
+              {...standardProps}
+              color={planet?.color || '#3b82f6'}
+              attach="material"
+            />
           )}
         </mesh>
 

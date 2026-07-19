@@ -3,19 +3,12 @@ import Constants from 'expo-constants';
 
 const APOD_FAVORITES_KEY = '@orbitx_apod_favorites';
 const NASA_APOD_URL = 'https://api.nasa.gov/planetary/apod';
-const DEFAULT_API_KEY = 'DEMO_KEY';
 
-const getApiKey = () => {
-  const extra = Constants.expoConfig?.extra || Constants.manifest?.extra;
-  const configKey = extra?.NASA_API_KEY || extra?.NASA_API_KEY;
-  return typeof configKey === 'string' && configKey.trim().length > 0
-    ? configKey.trim()
-    : DEFAULT_API_KEY;
-};
+const NASA_API_KEY = Constants.expoConfig?.extra?.NASA_API_KEY || 'DEMO_KEY';
 
 const buildApodUrl = (date) => {
   const query = new URLSearchParams({
-    api_key: getApiKey(),
+    api_key: NASA_API_KEY,
   });
   if (date) {
     query.append('date', date);

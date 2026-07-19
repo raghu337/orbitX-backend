@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     Animated,
-    Dimensions,
     ScrollView,
     StyleSheet,
     Text,
@@ -12,9 +11,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../../hooks/useAuth';
-import { COLORS, FONTS, SHADOWS, SPACING } from '../../theme/theme';
-
-const { width } = Dimensions.get('window');
+import { COLORS, FONTS, SPACING } from '../../theme/theme';
 
 // Premium interactive glassmorphic button component
 const HUDCard = ({ title, subtitle, icon, color, onPress }) => {
@@ -57,9 +54,14 @@ const HUDCard = ({ title, subtitle, icon, color, onPress }) => {
   );
 };
 
-// Main HomeScreen Overhaul
+// Main HomeScreen
 const HomeScreen = ({ navigation }) => {
   const { user } = useAuth();
+
+  if (navigation && !navigation.openDrawer) {
+    const { openDrawer } = require('../../navigation/RootNavigation');
+    navigation.openDrawer = openDrawer;
+  }
 
   return (
     <LinearGradient
@@ -80,17 +82,37 @@ const HomeScreen = ({ navigation }) => {
         >
           {/* Welcome HUD Header */}
           <View style={styles.hudHeader}>
-            <View>
-              <Text style={styles.systemTag}>ORBITX MISSION CONTROL</Text>
-              <Text style={styles.commanderText}>Cmdr. {user?.name || 'Explorer'}</Text>
+            <View style={{ zIndex: 999, elevation: 10, padding: 10 }}>
+              <TouchableOpacity
+                style={styles.burgerButton}
+                onPress={() => navigation.openDrawer()}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="menu" size={26} color="#00E5FF" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.profileButton}
-              onPress={() => navigation.navigate('Profile')}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="account-circle-outline" size={26} color={COLORS.primary} />
-            </TouchableOpacity>
+
+            <View style={{ flex: 1, marginLeft: SPACING.md, marginRight: SPACING.sm }}>
+              <Text style={styles.systemTag}>ORBITX MISSION CONTROL</Text>
+              <Text style={styles.commanderText} numberOfLines={1} adjustsFontSizeToFit>Cmdr. {user?.name || 'Explorer'}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('SearchScreen')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="magnify" size={26} color={COLORS.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('Profile')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="account-circle-outline" size={26} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Quick Stats Panel */}
@@ -118,7 +140,7 @@ const HomeScreen = ({ navigation }) => {
             subtitle="Engage real-time Groq LLM space instruction"
             icon="robot-outline"
             color={COLORS.warning}
-            onPress={() => navigation.navigate('Chat')}
+            onPress={() => navigation.navigate('SpaceChat')}
           />
 
           {/* Grid of Main Modules */}
@@ -127,7 +149,7 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.gridRow}>
               <TouchableOpacity
                 style={[styles.gridCard, { borderColor: 'rgba(0, 229, 255, 0.2)' }]}
-                onPress={() => navigation.navigate('Tracker')}
+                onPress={() => navigation.navigate('LiveTracking')}
                 activeOpacity={0.8}
               >
                 <View style={[styles.gridIconFrame, { backgroundColor: 'rgba(0, 229, 255, 0.08)' }]}>
@@ -139,7 +161,7 @@ const HomeScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={[styles.gridCard, { borderColor: 'rgba(255, 0, 229, 0.2)' }]}
-                onPress={() => navigation.navigate('Explorer')}
+                onPress={() => navigation.navigate('SolarSystem3D')}
                 activeOpacity={0.8}
               >
                 <View style={[styles.gridIconFrame, { backgroundColor: 'rgba(255, 0, 229, 0.08)' }]}>
@@ -238,6 +260,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 25, 45, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.25)',
+  },
+  burgerButton: {
     width: 44,
     height: 44,
     borderRadius: 14,

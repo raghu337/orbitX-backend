@@ -1,26 +1,21 @@
-import { useIsFocused } from '@react-navigation/native';
-import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { BlurView } from 'expo-blur';
-import React, { useMemo, useRef, useState, Suspense, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    ActivityIndicator,
+    BackHandler,
     Dimensions,
-    PanResponder,
     Platform,
+    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
-import { GestureHandlerRootView, PinchGestureHandler } from 'react-native-gesture-handler';
-import * as THREE from 'three';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Svg, { Path, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import OrbitRing from '../../components/space/OrbitRing';
-import PlanetMesh, { PLANET_TEXTURES } from '../../components/space/PlanetMesh';
-import SpaceBackground from '../../components/space/SpaceBackground';
 import { COLORS, SPACING, FONTS } from '../../theme/theme';
 
 const MONOSPACE_FONT = Platform.OS === 'ios' ? 'Courier' : 'monospace';
@@ -202,6 +197,187 @@ const SOLAR_SYSTEM = [
   },
 ];
 
+const LOCAL_BACKUP_PLANETS = [
+  {
+    id: 'sun',
+    name: 'Sun',
+    color: '#FF9D00',
+    scale: 4.0,
+    radius: 4.0,
+    distance: 0,
+    diameter: '1,391,000 km',
+    distanceFromSun: '0 km',
+    moons: '0',
+    fact: 'The Sun contains 99.86% of the mass in our solar system and drives the planetary orbits.',
+    tagline: 'The engine of our solar system',
+    temperature: '5,500°C',
+    velocity: '0 km/s',
+    gravity: '274 m/s²',
+    initialAngle: 0,
+    orbitSpeed: 0,
+  },
+  {
+    id: 'mercury',
+    name: 'Mercury',
+    color: '#8C8C8C',
+    scale: 0.8,
+    radius: 0.8,
+    distance: 60,
+    speed: 0.007,
+    orbitSpeed: 0.007,
+    rotationSpeed: 0.018,
+    diameter: '4,880 km',
+    distanceFromSun: '57.9 million km',
+    moons: '0',
+    fact: 'Mercury has the shortest orbit around the Sun, completing a year in 88 days.',
+    tagline: 'The swift messenger planet',
+    temperature: '167°C',
+    velocity: '47.4 km/s',
+    gravity: '3.7 m/s²',
+    initialAngle: 0.12,
+  },
+  {
+    id: 'venus',
+    name: 'Venus',
+    color: '#FFBF00',
+    scale: 1.2,
+    radius: 1.2,
+    distance: 85,
+    speed: 0.0056,
+    orbitSpeed: 0.0056,
+    rotationSpeed: 0.02,
+    diameter: '12,104 km',
+    distanceFromSun: '108.2 million km',
+    moons: '0',
+    fact: 'Venus rotates backwards compared to most planets and has a thick acidic atmosphere.',
+    tagline: 'The evening star',
+    temperature: '464°C',
+    velocity: '35.0 km/s',
+    gravity: '8.87 m/s²',
+    initialAngle: -0.08,
+  },
+  {
+    id: 'earth',
+    name: 'Earth',
+    color: '#00E5FF',
+    scale: 1.4,
+    radius: 1.4,
+    distance: 110,
+    speed: 0.0048,
+    orbitSpeed: 0.0048,
+    rotationSpeed: 0.023,
+    diameter: '12,742 km',
+    distanceFromSun: '149.6 million km',
+    moons: '1 (LUNA)',
+    fact: 'Earth is the only known planet with liquid surface water and a protective magnetic field.',
+    tagline: 'Home of life',
+    temperature: '15°C',
+    velocity: '29.8 km/s',
+    gravity: '9.81 m/s²',
+    initialAngle: 0.04,
+  },
+  {
+    id: 'mars',
+    name: 'Mars',
+    color: '#FF3B30',
+    scale: 1.1,
+    radius: 1.1,
+    distance: 135,
+    speed: 0.0038,
+    orbitSpeed: 0.0038,
+    rotationSpeed: 0.022,
+    diameter: '6,779 KM',
+    distanceFromSun: '227.9 M KM',
+    moons: '2 (PHOBOS, DEIMOS)',
+    fact: 'Mars has the largest volcano and canyon in the solar system: Olympus Mons and Valles Marineris.',
+    tagline: 'The red explorer',
+    temperature: '-63°C',
+    velocity: '24 KM/S',
+    gravity: '3.71 M/S²',
+    initialAngle: 0.0,
+  },
+  {
+    id: 'jupiter',
+    name: 'Jupiter',
+    color: '#FF9500',
+    scale: 2.5,
+    radius: 2.5,
+    distance: 170,
+    speed: 0.0022,
+    orbitSpeed: 0.0022,
+    rotationSpeed: 0.05,
+    diameter: '139,820 km',
+    distanceFromSun: '778.5 million km',
+    moons: '95',
+    fact: 'Jupiter is more than twice as massive as all the other planets combined.',
+    tagline: 'King of planets',
+    temperature: '-110°C',
+    velocity: '13.1 km/s',
+    gravity: '24.79 m/s²',
+    initialAngle: 0.5,
+  },
+  {
+    id: 'saturn',
+    name: 'Saturn',
+    color: '#FFCC00',
+    scale: 2.1,
+    radius: 2.1,
+    distance: 210,
+    speed: 0.0016,
+    orbitSpeed: 0.0016,
+    rotationSpeed: 0.04,
+    diameter: '116,460 km',
+    distanceFromSun: '1.4 billion km',
+    moons: '146',
+    fact: 'Saturn has the most extensive ring system in our solar system.',
+    tagline: 'The ringed giant',
+    temperature: '-140°C',
+    velocity: '9.7 km/s',
+    gravity: '10.44 m/s²',
+    initialAngle: -0.3,
+  },
+  {
+    id: 'uranus',
+    name: 'Uranus',
+    color: '#5AC8FA',
+    scale: 1.6,
+    radius: 1.6,
+    distance: 245,
+    speed: 0.0011,
+    orbitSpeed: 0.0011,
+    rotationSpeed: 0.03,
+    diameter: '50,724 km',
+    distanceFromSun: '2.9 billion km',
+    moons: '28',
+    fact: 'Uranus rotates on its side, meaning its poles point almost directly at the Sun.',
+    tagline: 'The tilted ice giant',
+    temperature: '-195°C',
+    velocity: '6.8 km/s',
+    gravity: '8.69 m/s²',
+    initialAngle: 0.2,
+  },
+  {
+    id: 'neptune',
+    name: 'Neptune',
+    color: '#007AFF',
+    scale: 1.5,
+    radius: 1.5,
+    distance: 280,
+    speed: 0.0008,
+    orbitSpeed: 0.0008,
+    rotationSpeed: 0.035,
+    diameter: '49,244 km',
+    distanceFromSun: '4.5 billion km',
+    moons: '16',
+    fact: 'Neptune is the most distant planet in our solar system, with supersonic winds.',
+    tagline: 'The deep blue world',
+    temperature: '-200°C',
+    velocity: '5.4 km/s',
+    gravity: '11.15 m/s²',
+    initialAngle: -0.1,
+  },
+];
+
 const BODIES_DATA = {
   sun: {
     name: 'Sun (Core Star)',
@@ -269,39 +445,117 @@ const BODIES_DATA = {
 };
 
 const SolarSystem3D = ({ route, navigation }) => {
-  const isFocused = useIsFocused();
-  
+  const { width, height } = useWindowDimensions();
+
+  // Tactical Mars HUD layout coordinates
+  const PANEL_WIDTH = width - 32;
+  const PANEL_HEIGHT = 275;
+  const PANEL_LEFT = 16;
+  const PANEL_BOTTOM = 95;
+  const PANEL_TOP = height - PANEL_BOTTOM - PANEL_HEIGHT;
+
+  // Anchor connection point on the panel's top-right corner
+  const ANCHOR_X = PANEL_LEFT + PANEL_WIDTH;
+  const ANCHOR_Y = PANEL_TOP + 40;
+
   const currentDay = useMemo(() => new Date().getDate(), []);
 
-  // Refs for procedural light cycle modulation
-  const sunMaterialRef = useRef();
-  const ambientLightRef = useRef();
-  const directionalLightRef = useRef();
+  // Mock backend fetch state hook (currently null or empty to simulate offline connection dropped)
+  const [backendPlanetsData, setBackendPlanetsData] = useState([]);
+  
+  // Patch the Data Loading Condition using logical OR fallback
+  const activePlanetsList = backendPlanetsData?.length > 0 ? backendPlanetsData : LOCAL_BACKUP_PLANETS;
 
   // Compute a unique day-based randomizer seed for starting orbital positions and solar cycle
   const dynamicSolarSystem = useMemo(() => {
-    return SOLAR_SYSTEM.map((planet) => {
+    return activePlanetsList.map((planet) => {
       if (planet.id === 'sun') return planet;
       // Calculate a unique starting angular radian position based on calendar day
       const initialAngle = (currentDay * 360) / 31; 
       return {
         ...planet,
-        initialAngle: (planet.initialAngle || 0) + initialAngle,
+        initialAngle: (planet.initialAngle || 0) + (initialAngle * Math.PI) / 180,
       };
     });
-  }, [currentDay]);
-
-  const dynamicSunIntensity = useMemo(() => {
-    // Adjust the base intensity of the Sun's light emission matrix (emissiveIntensity) to mimic changing solar cycles
-    return 4.5 + Math.sin(currentDay) * 0.5;
-  }, [currentDay]);
+  }, [currentDay, activePlanetsList]);
 
   // Set Mars as default target locked planet
-  const [selectedPlanet, setSelectedPlanet] = useState(dynamicSolarSystem[4]);
+  const [selectedPlanet, setSelectedPlanet] = useState(() => 
+    dynamicSolarSystem.find(p => p.id === 'mars') || dynamicSolarSystem[0]
+  );
   const [selectedBody, setSelectedBody] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
   const [scannedPlanets, setScannedPlanets] = useState({ mars: true });
+
+  // 2D Rotation Ticker state for animation
+  const [time, setTime] = useState(0);
+
+  useEffect(() => {
+    let animationFrameId;
+    const tick = () => {
+      setTime(t => t + 0.3); // Smooth progress increment
+      animationFrameId = requestAnimationFrame(tick);
+    };
+    animationFrameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (selectedBody || selectedPlanet) {
+        setSelectedBody(null);
+        setSelectedPlanet(null);
+        return true; // Enforces absolute interception
+      }
+      return false; // Allows standard stack goBack if no modal is open
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackPress
+    );
+    return () => backHandler.remove();
+  }, [selectedBody, selectedPlanet]);
+  const CX = width / 2;
+  const CY = height / 2 - 85; 
+
+  const maxAvailableRadius = (width - 48) / 2;
+  const minRadius = 35;
+  const orbitingPlanets = useMemo(() => {
+    return dynamicSolarSystem.filter((p) => p.id !== 'sun');
+  }, [dynamicSolarSystem]);
+
+  const radiusSpacing = useMemo(() => {
+    return orbitingPlanets.length > 1
+      ? (maxAvailableRadius - minRadius) / (orbitingPlanets.length - 1)
+      : 20;
+  }, [orbitingPlanets, maxAvailableRadius]);
+
+  const planetPositions = useMemo(() => {
+    const positions = {};
+    orbitingPlanets.forEach((planet, index) => {
+      const radius = planet.distance
+        ? minRadius + (planet.distance / 280) * (maxAvailableRadius - minRadius)
+        : minRadius + index * radiusSpacing;
+      // Orbit rotation based on time, initialAngle, and speed modifier
+      const angle = (planet.initialAngle || 0) + time * (planet.orbitSpeed || 0.01) * 4.0;
+      positions[planet.id] = {
+        x: CX + radius * Math.cos(angle),
+        y: CY + radius * Math.sin(angle),
+        radius,
+      };
+    });
+    return positions;
+  }, [orbitingPlanets, time, CX, CY, radiusSpacing, maxAvailableRadius, minRadius]);
+
+  // Coordinate mapping for selected planet to feed Svg overlays (computed dynamically using useMemo to avoid setState recursion loop)
+  const marsScreenPos = useMemo(() => {
+    if (!selectedPlanet) return { x: CX, y: CY };
+    if (selectedPlanet.id === 'sun') return { x: CX, y: CY };
+    const pos = planetPositions[selectedPlanet.id];
+    return pos ? { x: pos.x, y: pos.y } : { x: CX, y: CY };
+  }, [selectedPlanet, planetPositions, CX, CY]);
 
   useEffect(() => {
     const passedId = route?.params?.initialPlanetId;
@@ -315,94 +569,29 @@ const SolarSystem3D = ({ route, navigation }) => {
     }
   }, [route?.params?.initialPlanetId, route?.params?.initialBodyName, dynamicSolarSystem]);
 
-  const handleSelectBody = (bodyName) => {
-    if (!bodyName) {
+  const handleSelectBody = (body) => {
+    if (!body) {
       setSelectedBody(null);
       setSelectedPlanet(null);
       return;
     }
-    const key = bodyName.toLowerCase().split(' ')[0];
-    const bodyData = BODIES_DATA[key];
-    setSelectedBody(bodyData || null);
-
-    if (key === 'sun') {
-      setSelectedPlanet(dynamicSolarSystem[0]);
-    } else {
-      const planetObj = dynamicSolarSystem.find(p => p.name.toLowerCase() === key);
-      if (planetObj) {
-        handlePlanetSelect(planetObj);
+    if (typeof body === 'string') {
+      const key = body.toLowerCase().split(' ')[0];
+      const match = dynamicSolarSystem.find(p => p.id === key);
+      if (match) {
+        setSelectedBody(match);
+        setSelectedPlanet(match);
       }
-    }
-  };
-
-  // 2D screen coordinate projection for selected planet
-  const [marsScreenPos, setMarsScreenPos] = useState({ x: width / 2, y: height * 0.5 });
-
-  // Camera coordinates refs - Adjusted for optimal portrait viewing angle
-  const cameraRotation = useRef({ x: 0.0, y: 0.85 });
-  const cameraZoom = useRef(55);
-  const targetLookAt = useRef({ x: 0, y: -2, z: 0 });
-  
-  // Gesture start refs
-  const rotationStart = useRef({ x: 0.0, y: 0.85 });
-  const zoomStart = useRef(55);
-  const lookAtStart = useRef({ x: 0, y: -2, z: 0 });
-
-  // Share planet 3D coordinates ref
-  const planetPositions = useRef({});
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
-        rotationStart.current = { x: cameraRotation.current.x, y: cameraRotation.current.y };
-        zoomStart.current = cameraZoom.current;
-        if (targetLookAt && targetLookAt.current) {
-          lookAtStart.current = { ...targetLookAt.current };
-        }
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const touches = gestureState.numberActiveTouches || (evt.nativeEvent.touches && evt.nativeEvent.touches.length) || 1;
-        
-        if (touches === 2) {
-          const scaleFactor = 0.022 * (cameraZoom.current / 55);
-          const dx = gestureState.dx * scaleFactor;
-          const dy = gestureState.dy * scaleFactor;
-          const theta = cameraRotation.current.x;
-          if (targetLookAt && targetLookAt.current && lookAtStart && lookAtStart.current) {
-            targetLookAt.current.x = lookAtStart.current.x - (dx * Math.cos(theta) - dy * Math.sin(theta));
-            targetLookAt.current.z = lookAtStart.current.z - (dx * Math.sin(theta) + dy * Math.cos(theta));
-          }
-        } else {
-          const x = rotationStart.current.x - gestureState.dx * 0.0028;
-          const y = Math.max(0.1, Math.min(1.4, rotationStart.current.y + gestureState.dy * 0.0024));
-          cameraRotation.current = { x, y };
-        }
-      },
-      onPanResponderRelease: () => {
-        rotationStart.current = { ...cameraRotation.current };
-        if (targetLookAt && targetLookAt.current) {
-          lookAtStart.current = { ...targetLookAt.current };
-        }
-      },
-    })
-  ).current;
-
-  const handlePinch = ({ nativeEvent }) => {
-    const nextZoom = Math.max(15, Math.min(85, zoomStart.current / nativeEvent.scale));
-    cameraZoom.current = nextZoom;
-  };
-
-  const handlePinchStateChange = ({ nativeEvent }) => {
-    if (nativeEvent.state === 5) {
-      zoomStart.current = cameraZoom.current;
+    } else {
+      setSelectedBody(body);
+      setSelectedPlanet(body);
     }
   };
 
   const handlePlanetSelect = (planet) => {
     setIsScanning(false);
     setSelectedPlanet(planet);
+    setSelectedBody(planet);
     if (planet) {
       if (planet.id === 'mars') {
         setScanProgress(100);
@@ -433,11 +622,8 @@ const SolarSystem3D = ({ route, navigation }) => {
     }, 30);
   };
 
-  const visiblePlanets = useMemo(() => dynamicSolarSystem.filter((planet) => planet.id !== 'sun'), [dynamicSolarSystem]);
-
-  // Compute indicator line path data
   const indicatorLinePath = useMemo(() => {
-    if (!marsScreenPos) return '';
+    if (!marsScreenPos || isNaN(marsScreenPos.x) || isNaN(marsScreenPos.y)) return '';
     const x1 = marsScreenPos.x;
     const y1 = marsScreenPos.y;
     const x2 = ANCHOR_X;
@@ -446,11 +632,18 @@ const SolarSystem3D = ({ route, navigation }) => {
     // Draw sci-fi joint line
     const dx = x1 < x2 ? 22 : -22;
     return `M ${x1} ${y1} L ${x1 + dx} ${y1 + 18} L ${x1 + dx * 2} ${y2} L ${x2} ${y2}`;
-  }, [marsScreenPos]);
+  }, [marsScreenPos, ANCHOR_X, ANCHOR_Y]);
+
+  if (!activePlanetsList || activePlanetsList.length === 0) { return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0b0f19' }}><Text style={{ color: '#fff' }}>Loading Orbital Radar Matrix...</Text></View>; }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#040714" />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0b0f19', minHeight: '100%', width: '100%', position: 'relative' }}>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        style={{ width: '100%', minHeight: '100%', backgroundColor: '#0b0f19' }}
+      >
+        <StatusBar barStyle="light-content" backgroundColor="#040714" />
+        <View style={{ width: '100%', padding: 15, backgroundColor: '#1e3a8a', alignItems: 'center' }}><Text style={{ color: '#ffffff', fontWeight: 'bold' }}>🛰️ ORBITAL DASHBOARD ACTIVE (ALL SYSTEMS ONLINE)</Text></View>
       
       {/* Outer Sci-fi Neon Frame Overlay */}
       <View style={styles.outerBorderFrame} pointerEvents="none">
@@ -490,123 +683,169 @@ const SolarSystem3D = ({ route, navigation }) => {
         </View>
       </SafeAreaView>
 
-      {/* 3D Canvas Viewport */}
-      <PinchGestureHandler onGestureEvent={handlePinch} onHandlerStateChange={handlePinchStateChange}>
-        <View style={styles.gestureSurface} {...panResponder.panHandlers}>
-          <View style={styles.canvasWrapper}>
-            {isFocused ? (
-              <Suspense fallback={
-                <View style={styles.canvasLoadingContainer}>
-                  <ActivityIndicator size="large" color="#00E5FF" />
-                  <Text style={styles.canvasLoadingText}>Pre-rendering Heliocentric Grid...</Text>
-                </View>
-              }>
-                <Canvas
-                  style={styles.canvas}
-                  shadows={{ type: THREE.PCFShadowMap }}
-                  camera={{ position: [0, 22, 55], fov: 60 }}
-                >
-                  <fog attach="fog" args={['#040714', 25, 140]} />
-                  <ambientLight ref={ambientLightRef} intensity={0.25} />
-                  <directionalLight ref={directionalLightRef} intensity={0.5} position={[5, 10, 5]} />
-
-                  <Suspense fallback={null}>
-                    {/* Starry space background */}
-                    <SpaceBackground starCount={340} />
-
-                    {/* Center Sun mesh with emissive material */}
-                    <mesh 
-                      position={[0, 0, 0]}
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        handleSelectBody('Sun');
-                      }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleSelectBody('Sun');
-                      }}
-                    >
-                      <sphereGeometry args={[2.5, 32, 32]} />
-                      <meshStandardMaterial
-                        ref={sunMaterialRef}
-                        color="#FFFFFF"
-                        emissive="#FF9D00"
-                        emissiveIntensity={dynamicSunIntensity}
-                      />
-                      <pointLight
-                        castShadow
-                        intensity={5.5}
-                        distance={130}
-                        decay={1.2}
-                        shadow-mapSize-width={1024}
-                        shadow-mapSize-height={1024}
-                      />
-                    </mesh>
-
-                    {/* Glowing coronas */}
-                    <mesh>
-                      <sphereGeometry args={[2.5 * 1.15, 32, 32]} />
-                      <meshBasicMaterial
-                        color="#FF9D00"
-                        transparent
-                        opacity={0.45}
-                        blending={THREE.AdditiveBlending}
-                        side={THREE.BackSide}
-                      />
-                    </mesh>
-                    <mesh>
-                      <sphereGeometry args={[2.5 * 1.35, 32, 32]} />
-                      <meshBasicMaterial
-                        color="#FF6B00"
-                        transparent
-                        opacity={0.2}
-                        blending={THREE.AdditiveBlending}
-                        side={THREE.BackSide}
-                      />
-                    </mesh>
-
-                    {/* Planet Orbits and Meshes */}
-                    {visiblePlanets.map((planet) => (
-                      <React.Fragment key={planet.id}>
-                        <OrbitRing radius={planet.distance} color={planet.color} opacity={0.14} />
-                        <PlanetMesh
-                          planet={planet}
-                          scale={planet.scale}
-                          distance={planet.distance}
-                          orbitSpeed={planet.orbitSpeed}
-                          rotationSpeed={planet.rotationSpeed}
-                          onSelect={handlePlanetSelect}
-                          onSelectBody={handleSelectBody}
-                          isSelected={selectedPlanet?.id === planet.id}
-                          planetPositionsRef={planetPositions}
-                          isScanning={isScanning && selectedPlanet?.id === planet.id}
-                        />
-                      </React.Fragment>
-                    ))}
-                  </Suspense>
-
-                  {/* Camera controller & Planet projector */}
-                  <CameraController
-                    rotationRef={cameraRotation}
-                    zoomRef={cameraZoom}
-                    targetLookAt={targetLookAt}
-                    selectedPlanet={selectedPlanet}
-                    planetPositionsRef={planetPositions}
-                    onMarsProject={setMarsScreenPos}
-                    sunMaterialRef={sunMaterialRef}
-                    ambientLightRef={ambientLightRef}
-                    directionalLightRef={directionalLightRef}
-                    currentDay={currentDay}
-                  />
-                </Canvas>
-              </Suspense>
-            ) : null}
-          </View>
+      {/* 2D Vector Radar Viewport */}
+      <View style={[styles.radarViewport, { height: height }]}>
+        <ScrollView
+          maximumZoomScale={3.0}
+          minimumZoomScale={0.5}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            width: width,
+            height: height,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          {/* Starry background effect - simple stars scattered in the cosmic viewport */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {[...Array(60)].map((_, i) => {
+            const starX = (Math.sin(i * 932) * 0.5 + 0.5) * width;
+            const starY = (Math.cos(i * 423) * 0.5 + 0.5) * height;
+            const opacity = Math.sin(i * 123) * 0.4 + 0.5;
+            const size = i % 5 === 0 ? 3 : i % 3 === 0 ? 2 : 1;
+            return (
+              <View
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: starX,
+                  top: starY,
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  backgroundColor: '#FFFFFF',
+                  opacity: opacity,
+                }}
+              />
+            );
+          })}
         </View>
-      </PinchGestureHandler>
+
+        {/* Concentric orbital track border lines */}
+        {orbitingPlanets.map((planet, index) => {
+          const radius = planet.distance
+            ? minRadius + (planet.distance / 280) * (maxAvailableRadius - minRadius)
+            : minRadius + index * radiusSpacing;
+          const pos = planetPositions[planet.id];
+          const badgeSize = Math.max(10, (planet.radius || planet.scale || 1) * 12);
+          const isSelected = selectedPlanet?.id === planet.id;
+          return (
+            <React.Fragment key={planet.id}>
+              {/* Orbit ring removed — no decorative background rings rendered */}
+
+              {/* Planet Text Label */}
+              {pos && (
+                <Text
+                  style={[
+                    styles.planetLabel2D,
+                    {
+                      left: pos.x + badgeSize / 2 + 4,
+                      top: pos.y - 7,
+                      color: isSelected ? '#00E5FF' : 'rgba(255, 255, 255, 0.45)',
+                      fontWeight: isSelected ? '900' : '500',
+                    }
+                  ]}
+                >
+                  {planet.name.toUpperCase()}
+                </Text>
+              )}
+
+              {/* Planet badge */}
+              {pos && (
+                isSelected ? (
+                  /*
+                   * ── SELECTED PLANET: tracking circle wrapper ──────────────────────
+                   * The outer TouchableOpacity IS the blue tracking circle.
+                   * The planet coloured dot is absolutely centered inside it so both
+                   * share the exact same pos.x / pos.y coordinate — zero positional lag.
+                   */
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    style={[
+                      styles.trackingCircleWrapper,
+                      {
+                        left: pos.x - (badgeSize + 16) / 2,
+                        top: pos.y - (badgeSize + 16) / 2,
+                        width: badgeSize + 16,
+                        height: badgeSize + 16,
+                        borderRadius: (badgeSize + 16) / 2,
+                      }
+                    ]}
+                    onPress={() => handleSelectBody(planet)}
+                  >
+                    {/* Planet coloured dot — explicitly centered via flex on trackingCircleWrapper */}
+                    <View
+                      style={[
+                        styles.trackingPlanetDot,
+                        {
+                          width: badgeSize,
+                          height: badgeSize,
+                          borderRadius: badgeSize / 2,
+                          backgroundColor: planet.color || '#FFFFFF',
+                          shadowColor: planet.color,
+                          shadowOpacity: 0.9,
+                          shadowRadius: 8,
+                        }
+                      ]}
+                    >
+                      {/* White core pulse dot inside planet */}
+                      <View style={styles.activeBadgeIndicator} />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  /* ── NON-SELECTED PLANET: simple coloured dot ─────────────────── */
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    style={[
+                      styles.planetBadge2D,
+                      {
+                        width: badgeSize,
+                        height: badgeSize,
+                        borderRadius: badgeSize / 2,
+                        left: pos.x - badgeSize / 2,
+                        top: pos.y - badgeSize / 2,
+                        backgroundColor: planet.color || '#FFFFFF',
+                        borderColor: '#0b0f19',
+                        borderWidth: 1,
+                        shadowColor: planet.color,
+                        shadowOpacity: 0.5,
+                        shadowRadius: 4,
+                      }
+                    ]}
+                    onPress={() => handleSelectBody(planet)}
+                  />
+                )
+              )}
+            </React.Fragment>
+          );
+        })}
+
+        {/* Central Sun component */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+          style={[
+            styles.sunContainer2D,
+            {
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              left: CX - 24,
+              top: CY - 24,
+            }
+          ]}
+          onPress={() => handleSelectBody({ id: 'sun', name: 'Sun', color: '#f59e0b', type: 'Star', mass: '1.989 × 10^30 kg', radius: '696,340 km', velocity: '0 km/s (Static)', description: 'The star at the center of the Solar System, comprising 99.8% of its total mass.' })}
+        >
+          <View style={[styles.sunGlow2D, { width: 60, height: 60, borderRadius: 30 }]} />
+          <View style={[styles.sunCore2D, { width: 36, height: 36, borderRadius: 18 }]} />
+          <Text style={[styles.sunLabel2D, { top: 50 }]}>SUN</Text>
+        </TouchableOpacity>
 
       {/* SVG Indicator Line & Target Reticles Overlay */}
-      {selectedPlanet && (
+      {selectedPlanet && marsScreenPos && !isNaN(marsScreenPos.x) && !isNaN(marsScreenPos.y) && (
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Neon Glow Leader Line */}
           <Path
@@ -710,177 +949,65 @@ const SolarSystem3D = ({ route, navigation }) => {
           </BlurView>
         </View>
       )}
+        </ScrollView>
+      </View>
 
-      {/* Floating Glassmorphic Unified Telemetry Data Panel */}
-      {selectedPlanet && !selectedBody && (
-        <View style={styles.marsDataPanel}>
-          <BlurView intensity={45} tint="dark" style={styles.hudCard}>
-            <View style={styles.panelHeaderRow}>
+      {/* Detailed information overlay card */}
+      {selectedBody && (
+        <View style={styles.detailCardContainer}>
+          <BlurView intensity={70} tint="dark" style={styles.detailHudCard}>
+            {/* Header row with Title and Close Button */}
+            <View style={styles.detailCardHeader}>
               <View>
-                <Text style={styles.panelTitle}>PLANET DATA: {selectedPlanet.name.toUpperCase()}</Text>
-                <Text style={styles.panelSubtitle}>
-                  {selectedPlanet.id === 'mars' ? 'TARGET LOCKED' : selectedPlanet.tagline}
+                <Text style={styles.detailCardTitle}>{selectedBody.name.toUpperCase()}</Text>
+                <Text style={styles.detailCardSubtitle}>
+                  {selectedBody.id === 'sun' ? 'SOLAR SYSTEM CENTER' : 'ORBITAL TELEMETRY'}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {scannedPlanets[selectedPlanet.id] && (
-                  <View style={styles.selectedBadge}>
-                    <Text style={styles.selectedBadgeText}>SCANNED</Text>
-                  </View>
-                )}
-                <TouchableOpacity style={[styles.closeButton, { marginLeft: 8 }]} onPress={() => setSelectedPlanet(null)}>
-                  <Text style={styles.closeButtonText}>CLOSE</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Structured Telemetry Row Grids */}
-            <View style={styles.dataGrid}>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>DIAMETER</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.diameter.toUpperCase()}</Text>
-              </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>AVG. DISTANCE</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.distanceFromSun.toUpperCase()}</Text>
-              </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>ORBITAL SPEED</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.velocity.toUpperCase()}</Text>
-              </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>SURFACE TEMP</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.temperature}</Text>
-              </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>GRAVITY</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.gravity || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>MOONS</Text>
-                <Text style={styles.dataValue}>{selectedPlanet.moons.toUpperCase()}</Text>
-              </View>
-            </View>
-
-            {/* Interactive Scanning or Fact descriptions */}
-            {isScanning ? (
-              <View style={styles.scanProgressBlock}>
-                <Text style={styles.scanProgressText}>PROBE SCANNING... {scanProgress}%</Text>
-                <View style={styles.scanProgressBar}>
-                  <View style={[styles.scanProgressFill, { width: `${scanProgress}%` }]} />
-                </View>
-              </View>
-            ) : scannedPlanets[selectedPlanet.id] ? (
-              <View style={styles.descriptionBlock}>
-                <Text style={styles.descriptionText}>{selectedPlanet.fact}</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.tacticalScanButton} onPress={handleStartScan}>
-                <Text style={styles.tacticalScanText}>INITIATE RADAR PROBE SCAN</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Always-on quick selector inside active planet details card */}
-            <View style={[styles.quickSelector, { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', paddingTop: 8 }]}>
-              {dynamicSolarSystem.filter(p => p.id !== 'sun').map((p) => (
-                <TouchableOpacity
-                   key={p.id}
-                   style={[
-                     styles.quickSelectBtn, 
-                     { 
-                       borderColor: p.id === selectedPlanet.id ? p.color : p.color + '40',
-                       backgroundColor: p.id === selectedPlanet.id ? 'rgba(0, 229, 255, 0.12)' : 'rgba(6, 10, 28, 0.35)',
-                       width: '23%',
-                       marginBottom: 4,
-                     }
-                   ]}
-                   onPress={() => handleSelectBody(p.name)}
-                >
-                  <Text style={[styles.quickSelectBtnText, { color: p.color, fontWeight: p.id === selectedPlanet.id ? '900' : '800' }]}>
-                    {p.name.substring(0, 3).toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Data Source Footer */}
-            <View style={styles.sourceFooter}>
-              <Text style={styles.sourceLabel}>DATA SOURCE:</Text>
-              <Text style={styles.sourceValue}>ORBITX HELIOCORE ENHANCED</Text>
-            </View>
-            <View style={[styles.sourceFooter, { borderTopWidth: 0, marginTop: 2 }]}>
-              <Text style={styles.sourceLabel}>COSMIC CYCLE STATUS:</Text>
-              <Text style={[styles.sourceValue, { color: '#00FF9D' }]}>SYNCHRONIZED</Text>
-            </View>
-          </BlurView>
-        </View>
-      )}
-
-      {/* Sleek Bottom Detail Panel */}
-      {selectedBody && (
-        <View style={styles.bodyDetailPanel}>
-          <BlurView intensity={70} tint="dark" style={styles.bodyDetailHudCard}>
-            <View style={styles.panelHeaderRow}>
-              <View>
-                <Text style={styles.panelTitle}>{selectedBody.name.toUpperCase()}</Text>
-                <Text style={styles.panelSubtitle}>CLASSIFICATION: {selectedBody.type.toUpperCase()}</Text>
-              </View>
               <TouchableOpacity 
-                style={styles.closeButton} 
-                onPress={() => handleSelectBody(null)}
+                style={styles.detailCloseButton} 
+                onPress={() => {
+                  setSelectedBody(null);
+                  setSelectedPlanet(null);
+                }}
               >
-                <Text style={styles.closeButtonText}>CLOSE [X]</Text>
+                <Text style={styles.detailCloseButtonText}>X</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Classification & Scientific Metrics Grid */}
-            <View style={styles.dataGrid}>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>TEMPERATURE</Text>
-                <Text style={styles.dataValue}>{selectedBody.temperature.toUpperCase()}</Text>
+            {/* Metrics Grid */}
+            <View style={styles.detailGrid}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>MASS</Text>
+                <Text style={styles.detailValue}>
+                  {selectedBody.mass || BODIES_DATA[selectedBody.id]?.mass || 'N/A'}
+                </Text>
               </View>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>MASS / SCALE</Text>
-                <Text style={styles.dataValue}>{selectedBody.mass.toUpperCase()}</Text>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>RADIUS / SCALE</Text>
+                <Text style={styles.detailValue}>
+                  {selectedBody.radius ? `${selectedBody.radius}x` : selectedBody.diameter || 'N/A'}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>ORBITAL SPEED</Text>
+                <Text style={styles.detailValue}>
+                  {selectedBody.velocity || selectedBody.orbitSpeed ? `${selectedBody.velocity || selectedBody.orbitSpeed}` : 'N/A'}
+                </Text>
               </View>
             </View>
 
-            {/* Scientific Profile Description */}
-            <View style={styles.descriptionBlock}>
-              <Text style={styles.descriptionText}>{selectedBody.description}</Text>
+            {/* Educational Description Summary Block */}
+            <View style={styles.detailDescBlock}>
+              <Text style={styles.detailDescText}>
+                {selectedBody.description || BODIES_DATA[selectedBody.id]?.description || selectedBody.fact || 'No data available.'}
+              </Text>
             </View>
 
-            {/* Data Source Footer */}
-            <View style={styles.sourceFooter}>
-              <Text style={styles.sourceLabel}>TELEMETRY SOURCE:</Text>
-              <Text style={styles.sourceValue}>ORBITX HELIOCORE V2.0</Text>
-            </View>
-          </BlurView>
-        </View>
-      )}
-
-      {/* Heliocentric Quick Selector if no planet selected and no body selected */}
-      {!selectedPlanet && !selectedBody && (
-        <View style={styles.marsDataPanel}>
-          <BlurView intensity={30} tint="dark" style={styles.hudCard}>
-            <Text style={styles.systemCoreTitle}>HELIOCENTRIC CORE TELEMETRY</Text>
-            <Text style={styles.systemCoreSubtitle}>SELECT A CELESTIAL BODY IN VIEWPORT OR CONSOLE LIST</Text>
-            <View style={styles.quickSelector}>
-              {dynamicSolarSystem.filter(p => p.id !== 'sun').map((p) => (
-                <TouchableOpacity
-                   key={p.id}
-                   style={[styles.quickSelectBtn, { borderColor: p.color + '40' }]}
-                   onPress={() => handleSelectBody(p.name)}
-                >
-                  <Text style={[styles.quickSelectBtnText, { color: p.color }]}>
-                    {p.name.substring(0, 3).toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={[styles.sourceFooter, { borderTopWidth: 1, marginTop: 8 }]}>
-              <Text style={styles.sourceLabel}>COSMIC CYCLE STATUS:</Text>
-              <Text style={[styles.sourceValue, { color: '#00FF9D' }]}>SYNCHRONIZED</Text>
+            {/* Footer */}
+            <View style={styles.detailFooter}>
+              <Text style={styles.detailFooterLabel}>STATUS:</Text>
+              <Text style={[styles.detailFooterVal, { color: '#00FF9D' }]}>DATA SYNCHRONIZED</Text>
             </View>
           </BlurView>
         </View>
@@ -940,112 +1067,35 @@ const SolarSystem3D = ({ route, navigation }) => {
           </View>
         </BlurView>
       </View>
-
+      {/* Bottom Horizontal Scrolling Selection Dock */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.bottomDock}
+        contentContainerStyle={styles.bottomDockContent}
+      >
+        {activePlanetsList.map((planet) => (
+          <TouchableOpacity
+            key={planet.id}
+            style={[
+              styles.dockItem,
+              selectedBody?.id === planet.id && styles.dockItemActive,
+            ]}
+            onPress={() => handleSelectBody(planet)}
+          >
+            <View style={[styles.dockBadge, { backgroundColor: planet.color }]} />
+            <Text style={[
+              styles.dockText,
+              selectedBody?.id === planet.id && styles.dockTextActive,
+            ]}>
+              {planet.name.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      </ScrollView>
     </GestureHandlerRootView>
   );
-};
-
-const CameraController = ({
-  rotationRef,
-  zoomRef,
-  targetLookAt,
-  selectedPlanet,
-  planetPositionsRef,
-  onMarsProject,
-  sunMaterialRef,
-  ambientLightRef,
-  directionalLightRef,
-  currentDay,
-}) => {
-  const { camera, size } = useThree();
-  const currentLookAt = useRef(new THREE.Vector3(0, 0, 0));
-  const currentZoom = useRef(55);
-  const currentRotation = useRef({ x: 0.0, y: 0.85 });
-
-  useFrame((state) => {
-    if (!camera) return;
-
-    // Procedural solar cycle modulation inside the useFrame loop
-    if (state && state.clock) {
-      const time = state.clock.getElapsedTime();
-      const modulation = Math.sin(time * 0.5 + currentDay) * 0.15;
-
-      if (sunMaterialRef && sunMaterialRef.current) {
-        sunMaterialRef.current.emissiveIntensity = (4.5 + Math.sin(currentDay) * 0.5) + modulation * 2.0;
-      }
-      if (ambientLightRef && ambientLightRef.current) {
-        ambientLightRef.current.intensity = 0.25 + modulation;
-      }
-      if (directionalLightRef && directionalLightRef.current) {
-        directionalLightRef.current.intensity = 0.5 + modulation;
-      }
-    }
-
-    let targetX = 0;
-    let targetY = 0;
-    let targetZ = 0;
-    let targetZoomVal = zoomRef ? zoomRef.current : 55;
-
-    // Follow selected planet position dynamically if locked
-    if (selectedPlanet) {
-      let pos = { x: 0, y: 0, z: 0 };
-      if (selectedPlanet.id !== 'sun' && planetPositionsRef && planetPositionsRef.current && planetPositionsRef.current[selectedPlanet.id]) {
-        pos = planetPositionsRef.current[selectedPlanet.id];
-      }
-      targetX = pos.x;
-      targetY = pos.y;
-      targetZ = pos.z;
-      // Adjust target zoom value dynamically based on planet scale
-      targetZoomVal = selectedPlanet.scale * 8 + 6;
-    } else {
-      if (targetLookAt && targetLookAt.current) {
-        targetX = targetLookAt.current.x;
-        targetY = targetLookAt.current.y;
-        targetZ = targetLookAt.current.z;
-      }
-      if (zoomRef && zoomRef.current) {
-        targetZoomVal = zoomRef.current;
-      }
-    }
-
-    if (currentLookAt && currentLookAt.current) {
-      // Apply damping interpolation (LERP) - increased for faster/snappier tracking response
-      currentLookAt.current.x += (targetX - currentLookAt.current.x) * 0.18;
-      currentLookAt.current.y += (targetY - currentLookAt.current.y) * 0.18;
-      currentLookAt.current.z += (targetZ - currentLookAt.current.z) * 0.18;
-    }
-
-    if (currentZoom && currentZoom.current) {
-      currentZoom.current += (targetZoomVal - currentZoom.current) * 0.18;
-    }
-
-    if (currentRotation && currentRotation.current && rotationRef && rotationRef.current) {
-      currentRotation.current.x += (rotationRef.current.x - currentRotation.current.x) * 0.18;
-      currentRotation.current.y += (rotationRef.current.y - currentRotation.current.y) * 0.18;
-    }
-
-    if (camera && currentLookAt && currentLookAt.current && currentRotation && currentRotation.current && currentZoom) {
-      // Position camera using cylindrical coordinates
-      camera.position.x = currentLookAt.current.x + Math.sin(currentRotation.current.x) * currentZoom.current;
-      camera.position.y = currentLookAt.current.y + Math.sin(currentRotation.current.y) * currentZoom.current * 0.6 + 6;
-      camera.position.z = currentLookAt.current.z + Math.cos(currentRotation.current.x) * currentZoom.current;
-
-      camera.lookAt(currentLookAt.current);
-      camera.updateProjectionMatrix();
-    }
-
-    // Project selected planet position to 2D screen coordinates
-    if (selectedPlanet && planetPositionsRef && planetPositionsRef.current && planetPositionsRef.current[selectedPlanet.id] && onMarsProject && camera && size) {
-      const planetPos = planetPositionsRef.current[selectedPlanet.id];
-      const vector = new THREE.Vector3(planetPos.x, planetPos.y, planetPos.z);
-      vector.project(camera);
-      const x = (vector.x * 0.5 + 0.5) * size.width;
-      const y = (-(vector.y) * 0.5 + 0.5) * size.height;
-      onMarsProject({ x, y });
-    }
-  });
-
-  return null;
 };
 
 const styles = StyleSheet.create({
@@ -1195,16 +1245,109 @@ const styles = StyleSheet.create({
   gestureSurface: {
     flex: 1,
   },
-  canvasWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  canvas: {
+  radarViewport: {
+    flex: 1,
     width: '100%',
     height: '100%',
+    backgroundColor: '#0b0f19',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  orbitRing2D: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderStyle: 'dashed',
+  },
+  planetBadge2D: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  activeBadgeIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 3,
+  },
+  // ── Selected planet tracking circle ───────────────────────────────────────────────
+  trackingCircleWrapper: {
+    position: 'absolute',
+    // justifyContent + alignItems ensure the inner planet dot is always
+    // exactly centered on the circle regardless of badgeSize
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    shadowColor: '#38bdf8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  trackingPlanetDot: {
+    // The planet's own coloured dot, centered inside trackingCircleWrapper
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  planetLabel2D: {
+    position: 'absolute',
+    fontSize: 8.5,
+    fontFamily: MONOSPACE_FONT,
+    letterSpacing: 0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  sunContainer2D: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sunCore2D: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FF9D00',
+    shadowColor: '#FF9D00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  sunGlow2D: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 157, 0, 0.25)',
+  },
+  sunLabel2D: {
+    position: 'absolute',
+    top: 38,
+    color: '#FF9D00',
+    fontSize: 8,
+    fontFamily: MONOSPACE_FONT,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   scanningCompleteTag: {
     position: 'absolute',
@@ -1634,6 +1777,172 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: MONOSPACE_FONT,
     letterSpacing: 0.8,
+  },
+  bottomDock: {
+    position: 'absolute',
+    bottom: 110, // Raised further upside to prevent touching the bottom tab bar/safe area
+    left: 0,
+    right: 0,
+    height: 55, // Compact, sleek height
+    backgroundColor: 'rgba(6, 10, 28, 0.85)',
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.15)',
+  },
+  bottomDockContent: {
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  dockItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6, // Marginally reduced for compact height
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  dockItemActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderColor: '#00E5FF',
+  },
+  dockBadge: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  dockText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: MONOSPACE_FONT,
+  },
+  dockTextActive: {
+    color: '#00E5FF',
+  },
+  detailCardContainer: {
+    position: 'absolute',
+    bottom: 180, // Raised further to clear bottomDock (bottom: 110 + height: 55 = 165)
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    zIndex: 100,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  detailHudCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.35)',
+    backgroundColor: 'rgba(6, 10, 28, 0.85)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  detailCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 229, 255, 0.15)',
+    paddingBottom: 10,
+    marginBottom: 6,
+  },
+  detailCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: FONTS.bold || 'System',
+    letterSpacing: 1.5,
+  },
+  detailCardSubtitle: {
+    color: '#00E5FF',
+    fontSize: 9,
+    fontFamily: MONOSPACE_FONT,
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  detailCloseButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  detailCloseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  detailGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  detailItem: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+    borderRadius: 8,
+    padding: 8,
+    marginHorizontal: 4,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0, 229, 255, 0.12)',
+  },
+  detailLabel: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 7.5,
+    fontFamily: MONOSPACE_FONT,
+    marginBottom: 4,
+  },
+  detailValue: {
+    color: '#00E5FF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: MONOSPACE_FONT,
+  },
+  detailDescBlock: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  detailDescText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  detailFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  detailFooterLabel: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: 8,
+    fontFamily: MONOSPACE_FONT,
+  },
+  detailFooterVal: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    fontFamily: MONOSPACE_FONT,
+    letterSpacing: 0.5,
   },
 });
 
