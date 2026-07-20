@@ -60,7 +60,7 @@ const getAlertDetails = (distanceKm) => {
 };
 
 // Mercator projection logic (mapping Latitude/Longitude to Canvas X/Y)
-const mapToCanvas = (lat, lon, width, height) => {
+const latLongToPixel = (lat, lon, width, height) => {
   const x = ((lon + 180) / 360) * width;
   const maxLat = 85;
   const clampedLat = Math.max(-maxLat, Math.min(maxLat, lat));
@@ -72,7 +72,7 @@ const mapToCanvas = (lat, lon, width, height) => {
 };
 
 // Inverse Mercator projection logic (mapping Canvas X/Y back to Latitude/Longitude)
-const canvasToMap = (x, y, width, height) => {
+const pixelToLatLong = (x, y, width, height) => {
   const lon = (x / width) * 360 - 180;
   const maxLat = 85;
   const maxMerc = Math.log(Math.tan((Math.PI / 4) + ((maxLat * Math.PI) / 180 / 2)));
@@ -82,6 +82,53 @@ const canvasToMap = (x, y, width, height) => {
   return {
     latitude: Math.max(-90, Math.min(90, lat)),
     longitude: Math.max(-180, Math.min(180, lon))
+  };
+};
+
+// Keplerian elliptical trajectory coordinate calculator
+const getSatellitePositionAtTime = (sat, timeSecs) => {
+  const e = sat.eccentricity || 0.15;
+  const inclinationRad = (sat.inclination * Math.PI) / 180;
+  
+  // True anomaly theta advances with angular speed
+  const theta = sat.angle + sat.angularSpeed * timeSecs;
+  
+  // Radius variation due to eccentricity (Keplerian orbit)
+  const r = (1 - e * e) / (1 + e * Math.cos(theta)); 
+  
+  // Orbital plane coordinates
+  const xp = r * Math.cos(theta);
+  const yp = r * Math.sin(theta);
+  
+  // Rotate to 3D Earth-centered inertial approximation frame
+  const lan = sat.phase * Math.PI / 3.0; // Longitude of ascending node
+  const argPerigee = sat.phase * 0.5; // Argument of perigee
+  
+  const x_rot = xp * Math.cos(argPerigee) - yp * Math.sin(argPerigee);
+  const y_rot = xp * Math.sin(argPerigee) + yp * Math.cos(argPerigee);
+  
+  const x3d = x_rot * Math.cos(lan) - y_rot * Math.sin(lan) * Math.cos(inclinationRad);
+  const y3d = x_rot * Math.sin(lan) + y_rot * Math.cos(lan) * Math.cos(inclinationRad);
+  const z3d = y_rot * Math.sin(inclinationRad);
+  
+  const radius = Math.sqrt(x3d * x3d + y3d * y3d + z3d * z3d);
+  let lat = Math.asin(z3d / radius) * 180 / Math.PI;
+  let lon = Math.atan2(y3d, x3d) * 180 / Math.PI;
+  
+  // Apply Earth rotation drift
+  const earthRotationSpeed = 0.002;
+  lon = (lon - (timeSecs * earthRotationSpeed * 180 / Math.PI)) % 360;
+  if (lon < -180) lon += 360;
+  if (lon > 180) lon -= 360;
+  
+  const currentAltitude = sat.altitude * r;
+  const currentSpeed = sat.velocity * Math.sqrt((2 / r) - 1);
+  
+  return {
+    latitude: lat,
+    longitude: lon,
+    altitude: currentAltitude,
+    velocity: currentSpeed
   };
 };
 
@@ -121,12 +168,16 @@ export default function LiveTracker() {
   const [hoveredSat, setHoveredSat] = useState(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
+  // Custom states and refs for interactive geospatial map
+  const [selectedSatellite, setSelectedSatellite] = useState(null);
+  const pingsRef = useRef([]);
+
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const animationFrameIdRef = useRef(null);
   const lastTimeRef = useRef(0);
 
-  // Generate constellation blips dynamically
+  // Generate constellation blips dynamically with elliptical eccentricity
   const satellites = useMemo(() => {
     const list = [];
     const names = ['Starlink-E', 'OneWeb-B', 'GPS-III', 'IRIDIUM-S', 'NOAA-X', 'MetOp', 'TianGong', 'Cosmos', 'Aqua', 'Terra'];
@@ -143,7 +194,8 @@ export default function LiveTracker() {
       inclination: 51.6,
       phase: 0,
       angularSpeed: 0.08,
-      angle: 0
+      angle: 0,
+      eccentricity: 0.05
     });
 
     for (let i = 1; i < constellationDensity; i++) {
@@ -158,6 +210,7 @@ export default function LiveTracker() {
       const altitude = orbitalAltitude + altVariation;
       const velocity = 28440 * Math.sqrt(6371 / (6371 + altitude));
       const angularSpeed = (velocity / (6371 + altitude)) * 0.05;
+      const eccentricity = 0.05 + (i * 0.03) % 0.25;
       
       list.push({
         id,
@@ -169,7 +222,8 @@ export default function LiveTracker() {
         inclination,
         phase,
         angularSpeed,
-        angle: phase
+        angle: phase,
+        eccentricity
       });
     }
     return list;
@@ -207,15 +261,11 @@ export default function LiveTracker() {
   const activeSatelliteDataRaw = useMemo(() => {
     if (!activeSatellite) return null;
     const currentTimeSecs = Date.now() / 1000;
-    const currentAngle = activeSatellite.angle + activeSatellite.angularSpeed * currentTimeSecs;
-    const radInc = (activeSatellite.inclination * Math.PI) / 180;
-    
-    const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-    const longitude = ((currentAngle * 180) / Math.PI + activeSatellite.phase * 60) % 360 - 180;
+    const pos = getSatellitePositionAtTime(activeSatellite, currentTimeSecs);
     
     const distanceKm = calculateDistanceKm(
-      latitude,
-      longitude,
+      pos.latitude,
+      pos.longitude,
       groundBase.latitude,
       groundBase.longitude
     );
@@ -223,14 +273,16 @@ export default function LiveTracker() {
     const bearing = getBearingBetweenPoints(
       groundBase.latitude,
       groundBase.longitude,
-      latitude,
-      longitude
+      pos.latitude,
+      pos.longitude
     );
 
     return {
       ...activeSatellite,
-      latitude,
-      longitude,
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      altitude: pos.altitude,
+      velocity: pos.velocity,
       distanceKm,
       bearing
     };
@@ -242,22 +294,19 @@ export default function LiveTracker() {
       if (clickedPoint.type === 'satellite') {
         const sat = satellites.find(s => s.id === clickedPoint.id) || activeSatellite;
         const currentTimeSecs = Date.now() / 1000;
-        const currentAngle = sat.angle + sat.angularSpeed * currentTimeSecs;
-        const radInc = (sat.inclination * Math.PI) / 180;
-        const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-        const longitude = ((currentAngle * 180) / Math.PI + sat.phase * 60) % 360 - 180;
-        const distanceKm = calculateDistanceKm(latitude, longitude, groundBase.latitude, groundBase.longitude);
-        const bearing = getBearingBetweenPoints(groundBase.latitude, groundBase.longitude, latitude, longitude);
+        const pos = getSatellitePositionAtTime(sat, currentTimeSecs);
+        const distanceKm = calculateDistanceKm(pos.latitude, pos.longitude, groundBase.latitude, groundBase.longitude);
+        const bearing = getBearingBetweenPoints(groundBase.latitude, groundBase.longitude, pos.latitude, pos.longitude);
         return {
           id: sat.id,
           name: sat.name,
           noradId: sat.noradId,
-          latitude,
-          longitude,
+          latitude: pos.latitude,
+          longitude: pos.longitude,
           distanceKm,
           bearing,
-          velocity: sat.velocity,
-          altitude: sat.altitude,
+          velocity: pos.velocity,
+          altitude: pos.altitude,
           color: sat.color,
           type: 'satellite'
         };
@@ -354,7 +403,7 @@ export default function LiveTracker() {
           landmasses.forEach((poly) => {
             ctx.beginPath();
             poly.forEach((coord, idx) => {
-              const pos = mapToCanvas(coord[1], coord[0], canvas.width, canvas.height);
+              const pos = latLongToPixel(coord[1], coord[0], canvas.width, canvas.height);
               if (idx === 0) ctx.moveTo(pos.x, pos.y);
               else ctx.lineTo(pos.x, pos.y);
             });
@@ -370,7 +419,7 @@ export default function LiveTracker() {
           for (let lat = -80; lat <= 80; lat += 20) {
             ctx.beginPath();
             for (let lon = -180; lon <= 180; lon += 5) {
-              const pos = mapToCanvas(lat, lon, canvas.width, canvas.height);
+              const pos = latLongToPixel(lat, lon, canvas.width, canvas.height);
               if (lon === -180) ctx.moveTo(pos.x, pos.y);
               else ctx.lineTo(pos.x, pos.y);
             }
@@ -380,30 +429,50 @@ export default function LiveTracker() {
           for (let lon = -180; lon <= 180; lon += 30) {
             ctx.beginPath();
             for (let lat = -80; lat <= 80; lat += 5) {
-              const pos = mapToCanvas(lat, lon, canvas.width, canvas.height);
+              const pos = latLongToPixel(lat, lon, canvas.width, canvas.height);
               if (lat === -80) ctx.moveTo(pos.x, pos.y);
               else ctx.lineTo(pos.x, pos.y);
             }
             ctx.stroke();
           }
 
-          // 4. Draw Trajectory Path line for selected satellite
+          // Draw Ping Ripples (interaction proof)
+          pingsRef.current = pingsRef.current.filter(p => {
+            p.radius += 2.0;
+            p.alpha = 1 - (p.radius / p.maxRadius);
+            if (p.alpha > 0) {
+              ctx.strokeStyle = p.color;
+              ctx.lineWidth = 2;
+              ctx.globalAlpha = p.alpha;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.globalAlpha = 1.0;
+              return true;
+            }
+            return false;
+          });
+
+          // 4. Draw Trajectory Path line for selected satellite (elliptical trajectory representation)
           if (activeSatellite) {
             ctx.strokeStyle = activeSatellite.color;
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
             
-            const steps = 100;
+            const steps = 120;
             let first = true;
             let prevPos = null;
 
             for (let j = 0; j <= steps; j++) {
               const angle = (j / steps) * Math.PI * 2;
-              const radInc = (activeSatellite.inclination * Math.PI) / 180;
-              const latitude = Math.sin(angle) * Math.sin(radInc) * 65;
-              const longitude = ((angle * 180) / Math.PI + activeSatellite.phase * 60) % 360 - 180;
-              const pos = mapToCanvas(latitude, longitude, canvas.width, canvas.height);
+              const mockSat = {
+                ...activeSatellite,
+                angle: angle,
+                angularSpeed: 0
+              };
+              const pos3d = getSatellitePositionAtTime(mockSat, 0);
+              const pos = latLongToPixel(pos3d.latitude, pos3d.longitude, canvas.width, canvas.height);
 
               if (first) {
                 ctx.moveTo(pos.x, pos.y);
@@ -425,7 +494,7 @@ export default function LiveTracker() {
 
           // 5. Draw Ground Stations
           GROUND_STATIONS.forEach((gs) => {
-            const pos = mapToCanvas(gs.latitude, gs.longitude, canvas.width, canvas.height);
+            const pos = latLongToPixel(gs.latitude, gs.longitude, canvas.width, canvas.height);
             const isBase = gs.code === 'GS-ALPHA';
             ctx.fillStyle = isBase ? '#00FF9D' : '#00E5FF';
             ctx.shadowBlur = isBase ? 8 : 4;
@@ -443,7 +512,7 @@ export default function LiveTracker() {
 
           // 6. Draw custom clicked location lock indicator
           if (clickedPoint && clickedPoint.type === 'custom') {
-            const pos = mapToCanvas(clickedPoint.latitude, clickedPoint.longitude, canvas.width, canvas.height);
+            const pos = latLongToPixel(clickedPoint.latitude, clickedPoint.longitude, canvas.width, canvas.height);
             ctx.strokeStyle = '#FF2D55';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -456,32 +525,29 @@ export default function LiveTracker() {
             ctx.fill();
           }
 
-          // 7. Draw Satellite Nodes
+          // 7. Draw Satellite Nodes (Animate using requestAnimationFrame along orbital paths)
           const timeSecs = Date.now() / 1000;
           satellites.forEach((sat) => {
-            const currentAngle = sat.angle + sat.angularSpeed * timeSecs;
-            const radInc = (sat.inclination * Math.PI) / 180;
-            const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-            const longitude = ((currentAngle * 180) / Math.PI + sat.phase * 60) % 360 - 180;
-            const pos = mapToCanvas(latitude, longitude, canvas.width, canvas.height);
+            const pos3d = getSatellitePositionAtTime(sat, timeSecs);
+            const pos = latLongToPixel(pos3d.latitude, pos3d.longitude, canvas.width, canvas.height);
 
             const isSelected = sat.id === selectedId && (!clickedPoint || clickedPoint.type === 'satellite' && clickedPoint.id === sat.id);
             const isHovered = hoveredSat && hoveredSat.id === sat.id;
 
             // Draw selection halo
             if (isSelected) {
-              ctx.strokeStyle = sat.color;
+              ctx.strokeStyle = '#FF2D55'; // Selected/clicked nodes halo in Magenta
               ctx.lineWidth = 1.5;
               ctx.beginPath();
               ctx.arc(pos.x, pos.y, 10 + Math.sin(timestamp / 100) * 2, 0, Math.PI * 2);
               ctx.stroke();
             }
 
-            // Draw circular glowing node
+            // Draw circular glowing node (Magenta if clicked/selected, Cyber-Cyan for active nodes)
             const radius = isHovered ? 7.5 : (isSelected ? 5.5 : 4);
-            ctx.fillStyle = sat.color;
+            ctx.fillStyle = isSelected ? '#FF2D55' : '#00E5FF';
             ctx.shadowBlur = isHovered ? 15 : (isSelected ? 10 : 4);
-            ctx.shadowColor = sat.color;
+            ctx.shadowColor = ctx.fillStyle;
 
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
@@ -500,7 +566,7 @@ export default function LiveTracker() {
           // 8. Draw hover tooltip on map
           if (hoveredSat) {
             ctx.fillStyle = 'rgba(5, 9, 20, 0.9)';
-            ctx.strokeStyle = hoveredSat.color;
+            ctx.strokeStyle = '#00E5FF';
             ctx.lineWidth = 1;
             
             const tooltipText = `${hoveredSat.name} (${hoveredSat.id})`;
@@ -556,11 +622,8 @@ export default function LiveTracker() {
     let minDistance = 15; // 15px hover threshold
 
     satellites.forEach((sat) => {
-      const currentAngle = sat.angle + sat.angularSpeed * timeSecs;
-      const radInc = (sat.inclination * Math.PI) / 180;
-      const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-      const longitude = ((currentAngle * 180) / Math.PI + sat.phase * 60) % 360 - 180;
-      const pos = mapToCanvas(latitude, longitude, canvas.width, canvas.height);
+      const pos3d = getSatellitePositionAtTime(sat, timeSecs);
+      const pos = latLongToPixel(pos3d.latitude, pos3d.longitude, canvas.width, canvas.height);
 
       const dist = Math.hypot(x - pos.x, y - pos.y);
       if (dist < minDistance) {
@@ -584,13 +647,10 @@ export default function LiveTracker() {
     let nearestSat = null;
     let minDistance = 20;
 
-    // Check if clicked a satellite
+    // Check if clicked a satellite node
     satellites.forEach((sat) => {
-      const currentAngle = sat.angle + sat.angularSpeed * timeSecs;
-      const radInc = (sat.inclination * Math.PI) / 180;
-      const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-      const longitude = ((currentAngle * 180) / Math.PI + sat.phase * 60) % 360 - 180;
-      const pos = mapToCanvas(latitude, longitude, canvas.width, canvas.height);
+      const pos3d = getSatellitePositionAtTime(sat, timeSecs);
+      const pos = latLongToPixel(pos3d.latitude, pos3d.longitude, canvas.width, canvas.height);
 
       const dist = Math.hypot(clickX - pos.x, clickY - pos.y);
       if (dist < minDistance) {
@@ -599,8 +659,25 @@ export default function LiveTracker() {
       }
     });
 
+    // Interaction registration ping (Magenta ripple at click-coordinates)
+    pingsRef.current.push({ x: clickX, y: clickY, radius: 5, maxRadius: 40, alpha: 1, color: '#FF2D55' });
+
     if (nearestSat) {
+      const satPos = getSatellitePositionAtTime(nearestSat, timeSecs);
       setSelectedId(nearestSat.id);
+      
+      // Update local state selectedSatellite with coordinates & telemetry data
+      setSelectedSatellite({
+        id: nearestSat.id,
+        name: nearestSat.name,
+        latitude: satPos.latitude,
+        longitude: satPos.longitude,
+        velocity: satPos.velocity,
+        altitude: satPos.altitude,
+        x: clickX,
+        y: clickY
+      });
+
       setClickedPoint({
         type: 'satellite',
         id: nearestSat.id,
@@ -613,7 +690,7 @@ export default function LiveTracker() {
     let nearestGS = null;
     minDistance = 20;
     GROUND_STATIONS.forEach((gs) => {
-      const pos = mapToCanvas(gs.latitude, gs.longitude, canvas.width, canvas.height);
+      const pos = latLongToPixel(gs.latitude, gs.longitude, canvas.width, canvas.height);
       const dist = Math.hypot(clickX - pos.x, clickY - pos.y);
       if (dist < minDistance) {
         nearestGS = gs;
@@ -622,6 +699,7 @@ export default function LiveTracker() {
     });
 
     if (nearestGS) {
+      setSelectedSatellite(null);
       setClickedPoint({
         type: 'ground_station',
         id: nearestGS.code,
@@ -633,7 +711,8 @@ export default function LiveTracker() {
     }
 
     // Otherwise click is a custom coordinate lock
-    const coords = canvasToMap(clickX, clickY, canvas.width, canvas.height);
+    const coords = pixelToLatLong(clickX, clickY, canvas.width, canvas.height);
+    setSelectedSatellite(null);
     setClickedPoint({
       type: 'custom',
       id: 'USER-LOCK',
@@ -642,6 +721,21 @@ export default function LiveTracker() {
       longitude: coords.longitude
     });
   };
+
+  const selectedSatelliteDataLive = useMemo(() => {
+    if (!selectedSatellite) return null;
+    const sat = satellites.find(s => s.id === selectedSatellite.id);
+    if (!sat) return null;
+    const timeSecs = Date.now() / 1000;
+    const pos = getSatellitePositionAtTime(sat, timeSecs);
+    return {
+      ...selectedSatellite,
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      velocity: pos.velocity,
+      altitude: pos.altitude
+    };
+  }, [selectedSatellite, satellites, tick]);
 
   return (
     <div className="flex-1 p-6 overflow-y-auto h-screen max-w-5xl mx-auto space-y-6">
@@ -736,6 +830,46 @@ export default function LiveTracker() {
           onMouseLeave={() => setHoveredSat(null)}
           className="w-full h-full block rounded-xl cursor-crosshair"
         />
+
+        {/* Floating Geospatial Info Overlay Card */}
+        {selectedSatelliteDataLive && (
+          <div 
+            className="absolute z-30 p-3 rounded-xl border border-cyber-magenta bg-[#03060f]/95 shadow-[0_0_20px_rgba(255,45,85,0.25)] w-56 space-y-2 pointer-events-auto"
+            style={{
+              left: `${Math.max(10, Math.min(containerRef.current ? containerRef.current.clientWidth - 240 : 200, selectedSatelliteDataLive.x + 15))}px`,
+              top: `${Math.max(10, Math.min(containerRef.current ? containerRef.current.clientHeight - 150 : 200, selectedSatelliteDataLive.y - 65))}px`,
+              transition: 'left 0.1s ease-out, top 0.1s ease-out'
+            }}
+          >
+            <div className="flex justify-between items-center border-b border-white/[0.1] pb-1.5">
+              <span className="text-[10px] font-black text-cyber-magenta tracking-wider uppercase font-mono">🛰️ ID: {selectedSatelliteDataLive.id}</span>
+              <button 
+                onClick={() => {
+                  setSelectedSatellite(null);
+                  setSelectedId(satellites[0].id);
+                  setClickedPoint(null);
+                }}
+                className="text-[9px] font-bold text-slate-400 hover:text-white px-2 py-0.5 rounded bg-white/[0.05] hover:bg-white/15 cursor-pointer"
+              >
+                CLOSE
+              </button>
+            </div>
+            <div className="space-y-1.5 text-[9px] font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400">LATITUDE:</span>
+                <span className="text-white font-bold">{selectedSatelliteDataLive.latitude.toFixed(6)}°</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">LONGITUDE:</span>
+                <span className="text-white font-bold">{selectedSatelliteDataLive.longitude.toFixed(6)}°</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">SPEED:</span>
+                <span className="text-cyber-cyan font-bold">{Math.round(selectedSatelliteDataLive.velocity).toLocaleString()} km/h</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid: Stats and warning alerts */}
@@ -867,17 +1001,36 @@ export default function LiveTracker() {
               {satellites.slice(0, 15).map((sat) => {
                 const isSelected = selectedId === sat.id && (!clickedPoint || clickedPoint.type === 'satellite' && clickedPoint.id === sat.id);
                 const currentTimeSecs = Date.now() / 1000;
-                const currentAngle = sat.angle + sat.angularSpeed * currentTimeSecs;
-                const radInc = (sat.inclination * Math.PI) / 180;
-                const latitude = Math.sin(currentAngle) * Math.sin(radInc) * 65;
-                const longitude = ((currentAngle * 180) / Math.PI + sat.phase * 60) % 360 - 180;
+                const pos = getSatellitePositionAtTime(sat, currentTimeSecs);
                 
                 return (
                   <tr
                     key={sat.id}
                     onClick={() => {
                       setSelectedId(sat.id);
-                      setClickedPoint(null);
+                      setClickedPoint({
+                        type: 'satellite',
+                        id: sat.id,
+                        name: sat.name
+                      });
+                      
+                      // Also position the selected overlay on table row click
+                      const canvas = canvasRef.current;
+                      if (canvas) {
+                        const pixel = latLongToPixel(pos.latitude, pos.longitude, canvas.width, canvas.height);
+                        setSelectedSatellite({
+                          id: sat.id,
+                          name: sat.name,
+                          latitude: pos.latitude,
+                          longitude: pos.longitude,
+                          velocity: pos.velocity,
+                          altitude: pos.altitude,
+                          x: pixel.x,
+                          y: pixel.y
+                        });
+                        // Add magenta ripple at satellite position
+                        pingsRef.current.push({ x: pixel.x, y: pixel.y, radius: 5, maxRadius: 40, alpha: 1, color: '#FF2D55' });
+                      }
                     }}
                     className={`cursor-pointer transition-colors duration-200 ${
                       isSelected ? 'bg-cyber-cyan/5 hover:bg-cyber-cyan/10' : 'hover:bg-white/[0.02]'
@@ -885,13 +1038,13 @@ export default function LiveTracker() {
                   >
                     <td className="p-4 font-mono font-bold text-slate-400">{sat.noradId}</td>
                     <td className="p-4 font-bold text-white flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: sat.color }} />
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: isSelected ? '#FF2D55' : sat.color }} />
                       {sat.name}
                     </td>
-                    <td className="p-4 font-mono text-slate-300">{latitude.toFixed(4)}°</td>
-                    <td className="p-4 font-mono text-slate-300">{longitude.toFixed(4)}°</td>
-                    <td className="p-4 font-mono text-cyber-green">{Math.round(sat.altitude).toLocaleString()} km</td>
-                    <td className="p-4 font-mono text-cyber-cyan">{Math.round(sat.velocity).toLocaleString()} km/h</td>
+                    <td className="p-4 font-mono text-slate-300">{pos.latitude.toFixed(4)}°</td>
+                    <td className="p-4 font-mono text-slate-300">{pos.longitude.toFixed(4)}°</td>
+                    <td className="p-4 font-mono text-cyber-green">{Math.round(pos.altitude).toLocaleString()} km</td>
+                    <td className="p-4 font-mono text-cyber-cyan">{Math.round(pos.velocity).toLocaleString()} km/h</td>
                     <td className="p-4 text-center">
                       <span className="px-2.5 py-1 rounded-full text-[9px] font-bold tracking-wider uppercase bg-cyber-green/10 text-cyber-green border border-cyber-green/20">
                         Signal: 100%
