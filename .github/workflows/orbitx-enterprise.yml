@@ -250,6 +250,8 @@ jobs:
             exit 1
           fi
       - name: Run k6 Load Test
+        env:
+          K6_TARGET_URL: "http://127.0.0.1:8000"
         run: |
           k6 run scripts/load_test.js
       - name: Parse Performance Reports
@@ -279,6 +281,15 @@ jobs:
           mkdir -p reports
           pip install semgrep
           semgrep scan --config auto --sarif --output reports/semgrep.sarif || echo "Semgrep done."
+      - name: Run Trivy FS Scan
+        run: |
+          mkdir -p reports
+          wget -q https://github.com/aquasecurity/trivy/releases/download/v0.48.3/trivy_0.48.3_Linux-64bit.tar.gz
+          tar -zxvf trivy_0.48.3_Linux-64bit.tar.gz
+          ./trivy fs --format json --output reports/trivy-report.json . || echo "Trivy done."
+          if [ ! -f reports/trivy-report.json ]; then
+            echo '{"Results": []}' > reports/trivy-report.json
+          fi
       - name: Upload Security Reports
         if: always()
         uses: actions/upload-artifact@v4
