@@ -90,6 +90,32 @@ def write_markdown_report(report_path, data):
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(markdown_content)
     print(f"[k6 Parser] Performance Markdown report compiled at {report_path}")
+    
+    # Write the required summary table to GITHUB_STEP_SUMMARY
+    if "GITHUB_STEP_SUMMARY" in os.environ:
+        status_summary = "PASS" if data["status"] == "PASSED" else "FAIL"
+        summary_table = f"""
+## ⚡ OrbitX Performance (k6) Summary
+
+| Metric | Value |
+|--------|--------|
+| **Status** | {status_summary} |
+| **Total Requests** | {data["requests"]} |
+| **Requests/sec** | {data["rps"]} |
+| **Average Response Time** | {data["avg_duration"]} ms |
+| **p95** | {data["p95_duration"]} ms |
+| **p99** | {data["p99_duration"]} ms |
+| **Maximum Response Time** | {data["max_duration"]} ms |
+| **Error Rate** | {data["error_rate"]}% |
+| **Success Rate** | {data["success_rate"]}% |
+| **Artifacts Uploaded** | `performance-reports` |
+"""
+        try:
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as sf:
+                sf.write(summary_table)
+            print("[k6 Parser] Wrote summary table to GITHUB_STEP_SUMMARY.")
+        except Exception as e:
+            print(f"[k6 Parser] Error writing to GITHUB_STEP_SUMMARY: {e}")
 
 if __name__ == "__main__":
     parse_k6_results()
