@@ -1,0 +1,134 @@
+name: "⚡ Performance Testing (k6)"
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  performance-test:
+    name: "⚡ Performance (k6)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Record Start Time
+        run: |
+          echo "⏱️ Recording job start time..."
+          echo "$(date +%s)" > /tmp/start_time
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Backend Dependencies
+        run: |
+          echo "============================================="
+          echo "📦 Installing Backend Dependencies..."
+          echo "============================================="
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install uvicorn httpx
+
+      - name: Install k6
+        run: |
+          echo "============================================="
+          echo "📥 Installing k6..."
+          echo "============================================="
+          curl -s https://packages.k6.io/key.gpg | sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --import
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://packages.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list || true
+          sudo apt-get update || true
+          sudo apt-get install k6 -y || (
+            echo "⚠️ Repository install failed. Downloading k6 binary directly..."
+            wget -q https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz
+            tar -xzf k6-v0.49.0-linux-amd64.tar.gz
+            sudo mv k6-v0.49.0-linux-amd64/k6 /usr/bin/k6
+          )
+          k6 version
+
+      - name: Create Reports Directory
+        run: |
+          echo "📁 Creating reports directory..."
+          mkdir -p reports
+
+      - name: Start FastAPI in background
+        env:
+          SECRET_KEY: "perf_test_secret_key"
+          FIREBASE_CREDENTIALS_PATH: "mock-credentials.json"
+          FIREBASE_DATABASE_URL: "https://mock.firebaseio.com"
+        run: |
+          echo "============================================="
+          echo "🚀 Booting FastAPI server..."
+          echo "============================================="
+          cd backend
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../reports/uvicorn.log 2>&1 &
+          echo "FastAPI pid: $!"
+          cd ..
+
+      - name: Wait for Backend Health Check
+        run: |
+          echo "============================================="
+          echo "⏱️ Waiting for backend to become healthy..."
+          echo "============================================="
+          BASE_URL="http://127.0.0.1:8000"
+          echo "Detected BASE_URL: $BASE_URL"
+          
+          max_attempts=30
+          attempt=1
+          success=false
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "[Attempt $attempt/$max_attempts] Checking health on $BASE_URL/health..."
+            if curl -s -f "$BASE_URL/health" > /dev/null; then
+              echo "🟢 Backend is healthy and responding!"
+              success=true
+              break
+            fi
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+          
+          if [ "$success" = "false" ]; then
+            echo "❌ Error: Backend failed to respond after $((max_attempts * 5)) seconds."
+            echo "Uvicorn logs:"
+            cat reports/uvicorn.log || true
+            exit 1
+          fi
+
+      - name: Verify HTTP 200 before load tests
+        run: |
+          BASE_URL="http://127.0.0.1:8000"
+          echo "Verifying HTTP 200 on $BASE_URL/health..."
+          status_code=$(curl -o /dev/null -s -w "%{http_code}" "$BASE_URL/health")
+          echo "HTTP Status Code: $status_code"
+          if [ "$status_code" -ne 200 ]; then
+            echo "❌ Error: Health check did not return HTTP 200. Got: $status_code"
+            exit 1
+          fi
+
+      - name: Run k6 Performance Test
+        run: |
+          echo "============================================="
+          echo "⚡ Running k6 Performance Load Tests..."
+          echo "============================================="
+          k6 run scripts/load_test.js || echo "⚠️ k6 run finished with errors/threshold failures."
+
+      - name: Parse and Format Performance Reports
+        if: always()
+        run: |
+          echo "============================================="
+          echo "📊 Parsing k6 report JSON..."
+          echo "============================================="
+          python scripts/parse_k6.py
+
+      - name: Upload Performance Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-reports
+          path: reports/

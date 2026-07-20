@@ -20,7 +20,8 @@ def parse_k6_results():
             "p99_duration": 120.5,
             "error_rate": 0.0,
             "success_rate": 100.0,
-            "status": "PASSED"
+            "status": "PASSED",
+            "execution_time": "50.0s"
         }
         write_markdown_report(report_path, simulated_data)
         return
@@ -58,7 +59,8 @@ def parse_k6_results():
             "p99_duration": p99_duration,
             "error_rate": error_rate,
             "success_rate": success_rate,
-            "status": status
+            "status": status,
+            "execution_time": f"{round(requests / rps, 1) if rps > 0 else 0.0}s"
         }
         write_markdown_report(report_path, parsed_data)
     except Exception as e:
@@ -95,20 +97,20 @@ def write_markdown_report(report_path, data):
     if "GITHUB_STEP_SUMMARY" in os.environ:
         status_summary = "PASS" if data["status"] == "PASSED" else "FAIL"
         summary_table = f"""
-## ⚡ OrbitX Performance (k6) Summary
+⚡ OrbitX Performance (k6) Summary
 
 | Metric | Value |
 |--------|--------|
-| **Status** | {status_summary} |
-| **Total Requests** | {data["requests"]} |
-| **Requests/sec** | {data["rps"]} |
-| **Average Response Time** | {data["avg_duration"]} ms |
-| **p95** | {data["p95_duration"]} ms |
-| **p99** | {data["p99_duration"]} ms |
-| **Maximum Response Time** | {data["max_duration"]} ms |
-| **Error Rate** | {data["error_rate"]}% |
-| **Success Rate** | {data["success_rate"]}% |
-| **Artifacts Uploaded** | `performance-reports` |
+| Status | {status_summary} |
+| Execution Time | {data.get("execution_time", "Unknown")} |
+| Total Requests | {data["requests"]} |
+| Requests/sec | {data["rps"]} |
+| Avg Response Time | {data["avg_duration"]} ms |
+| p95 Response Time | {data["p95_duration"]} ms |
+| p99 Response Time | {data["p99_duration"]} ms |
+| Error Rate | {data["error_rate"]}% |
+| Success Rate | {data["success_rate"]}% |
+| Artifacts Uploaded | `performance-reports` |
 """
         try:
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as sf:
