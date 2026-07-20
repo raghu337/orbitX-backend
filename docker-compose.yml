@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: orbitx-backend-service
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-9s8dfyhsudifh98shf98hsd9fhsdhf9shdf9shdf9shdf9shdf9shdf}
+      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-mock-credentials.json}
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL:-https://mock-database.firebaseio.com}
+      - N2YO_API_KEY=${N2YO_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./orbitx-web
+      dockerfile: Dockerfile
+    container_name: orbitx-frontend-service
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  automation-runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: orbitx-automation-runner
+    environment:
+      - BASE_URL=http://frontend:80
+      - ORBITX_USERNAME=${ORBITX_USERNAME:-astronaut@orbitx.com}
+      - ORBITX_PASSWORD=${ORBITX_PASSWORD:-password123}
+      - BROWSER=${BROWSER:-chrome}
+    volumes:
+      - ./reports:/app/reports
+    shm_size: 2gb
+    depends_on:
+      - frontend
+      - backend
