@@ -445,10 +445,11 @@ jobs:
           echo "============================================="
           echo "⚡ Running k6 Performance Load Tests..."
           echo "============================================="
-          k6 run --summary-export=reports/k6-summary.json scripts/load_test.js || echo "⚠️ k6 run finished with errors/threshold failures."
+          k6 run scripts/load_test.js
 
       - name: Parse and Format Performance Reports
         if: always()
+        continue-on-error: true
         run: |
           echo "============================================="
           echo "📊 Parsing k6 report JSON..."
