@@ -1,0 +1,22 @@
+# Scorecard reporting configuration rules
+report:
+  title: "OrbitX Automated Security Assessment"
+  company: "OrbitX Mission Systems"
+  version: "1.0.0"
+
+exports:
+  formats:
+    - "html"
+    - "json"
+    - "markdown"
+  output_directory: "reports"
+
+notifications:
+  slack:
+    enabled: false
+    channel: "#security-alerts"
+    webhook_env: "SLACK_ALERTS_WEBHOOK"
+  email:
+    enabled: false
+    recipients:
+      - "secops-alerts@orbitx.com"

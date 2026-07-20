@@ -1,0 +1,24 @@
+# Semgrep Ignore Configuration for OrbitX
+
+# Ignore build artifacts and third-party modules
+node_modules/
+venv/
+.env
+.env.example
+.git/
+.expo/
+dist/
+build/
+assets/
+reports/
+security-reports/
+
+# Ignore lock files and minified files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+*.min.js
+*.min.css
+*.json
+*.html
+*.md

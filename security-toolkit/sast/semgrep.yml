@@ -1,0 +1,24 @@
+rules:
+  - id: python-sqlite-injection
+    pattern: |
+      $CONN.execute("..." + $VAR + "...")
+    message: "Detected potential SQL injection vulnerability. Avoid raw SQL string concatenation; use parameterized queries."
+    languages: [python]
+    severity: ERROR
+
+  - id: unsafe-cors-wildcard
+    patterns:
+      - pattern: |
+          allow_origins=[..., "*", ...]
+      - pattern-not: |
+          allow_origins=["https://production.orbitx-app.com"]
+    message: "Detected wildcard CORS configuration. Production environments must specify secure origin lists."
+    languages: [python]
+    severity: WARNING
+
+  - id: hardcoded-jwt-secret
+    pattern: |
+      SECRET_KEY = "..."
+    message: "Detected hardcoded JWT SECRET_KEY. Use os.environ.get to load variables dynamically from the environment."
+    languages: [python]
+    severity: ERROR

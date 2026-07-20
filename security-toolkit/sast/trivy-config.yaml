@@ -1,0 +1,23 @@
+# Trivy security parameters
+scan:
+  type: "fs"
+  scanners:
+    - "vuln"
+    - "config"
+    - "license"
+
+# Report format outputs
+format: "json"
+output: "reports/trivy-report.json"
+severity: "HIGH,CRITICAL"
+
+# License compliance gating
+license:
+  forbidden:
+    - "GPL-3.0"
+    - "AGPL-3.0"
+  severity: "HIGH"
+
+# Cache settings
+cache:
+  dir: ".trivy-cache"

@@ -1,0 +1,21 @@
+# OrbitX Gitleaks configuration rules
+title = "Gitleaks OrbitX Configuration"
+
+[[rules]]
+    description = "Generic API Keys"
+    id = "generic-api-key"
+    regex = '''(?i)(key|api|token|secret|password|passwd|auth)[-|_| ]*[=] *['|"]([0-9a-zA-Z]{16,64})['|"]'''
+    secretGroup = 2
+
+[[rules]]
+    description = "Private Key File detection"
+    id = "private-key"
+    regex = '''-----BEGIN [A-Z| ]*PRIVATE KEY-----'''
+
+[allowlist]
+    description = "Ignore testing directories and environment examples"
+    paths = [
+        '''automation/mock_app/.*''',
+        '''docker/\.env\.example''',
+        '''deployment-validation/.*'''
+    ]

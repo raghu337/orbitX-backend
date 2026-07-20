@@ -1,0 +1,15 @@
+# Ignore caches, reports, local packages, and envs from image build
+**/.pytest_cache/
+**/__pycache__/
+**/.venv/
+**/venv/
+**/node_modules/
+**/.git/
+**/.expo/
+**/dist/
+**/reports/
+**/screenshots/
+**/*.pyc
+**/*.pyo
+**/.env
+**/.env.example

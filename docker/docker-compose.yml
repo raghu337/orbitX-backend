@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  automation-runner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: orbitx-automation-runner
+    
+    # Environment variables to pass into the container
+    environment:
+      - BASE_URL=${BASE_URL:-http://127.0.0.1:8080}
+      - USERNAME=${USERNAME:-astronaut@orbitx.com}
+      - PASSWORD=${PASSWORD:-password123}
+      
+    # Mount the host directory 'reports' to receive reports and screenshots
+    volumes:
+      - ../reports:/app/reports
+      
+    # Prevent Chrome crashes inside docker by increasing shared memory size (default is 64M)
+    shm_size: 2gb

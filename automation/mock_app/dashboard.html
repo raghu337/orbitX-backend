@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OrbitX - Space Dashboard</title>
+    <style>
+        body {
+            background-color: #02050c;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        aside {
+            width: 250px;
+            background-color: #050914;
+            border-right: 1px solid #00e5ff33;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .brand {
+            font-weight: bold;
+            font-size: 20px;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+        }
+        nav button {
+            width: 100%;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #94a3b8;
+            padding: 12px 15px;
+            text-align: left;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        nav button.active, nav button:hover {
+            background-color: rgba(0, 229, 255, 0.1);
+            color: #00e5ff;
+            border-color: rgba(0, 229, 255, 0.2);
+        }
+        main {
+            flex: 1;
+            padding: 40px;
+            box-sizing: border-box;
+            background-color: #03060f;
+            overflow-y: auto;
+        }
+        .profile {
+            background-color: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: auto;
+        }
+        .profile h3 {
+            margin: 0 0 5px 0;
+            font-size: 13px;
+        }
+        .profile p {
+            margin: 0;
+            font-size: 10px;
+            color: #00e5ff;
+            text-transform: uppercase;
+        }
+        #logout-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            background-color: transparent;
+            border: 1px solid #ff386055;
+            color: #ff3860;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #logout-btn:hover {
+            background-color: rgba(255, 56, 96, 0.1);
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        .card {
+            background-color: #050914;
+            border: 1px solid #00e5ff22;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
+            margin-bottom: 20px;
+        }
+        .accent-btn {
+            background: #00e5ff;
+            color: black;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .sub-tabs button {
+            background: transparent;
+            border: 1px solid #00e5ff33;
+            color: #94a3b8;
+            padding: 8px 12px;
+            margin-right: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .sub-tabs button.active {
+            background: rgba(0, 229, 255, 0.1);
+            color: #00e5ff;
+            border-color: #00e5ff;
+        }
+        .toggle-btn {
+            width: 48px;
+            height: 24px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.3s;
+        }
+        .toggle-btn.bg-cyber-cyan {
+            background-color: #00e5ff;
+        }
+        .toggle-btn.bg-white-8 {
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+        .toggle-circle {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: black;
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            transition: transform 0.3s;
+        }
+        .toggle-btn.bg-cyber-cyan .toggle-circle {
+            transform: translateX(24px);
+        }
+        .active-model-btn {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: transparent;
+            color: #94a3b8;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        .active-model-btn.active {
+            border-color: #ff2d55;
+            background: rgba(255, 45, 85, 0.1);
+            color: #ff2d55;
+        }
+        .theme-btn {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: transparent;
+            color: #94a3b8;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 8px;
+            flex: 1;
+        }
+        .theme-btn.active {
+            border-color: #00ff9d;
+            background: rgba(0, 255, 157, 0.1);
+            color: #00ff9d;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            text-align: left;
+        }
+        tr.cursor-pointer:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        tr.selected-row {
+            background: rgba(0, 229, 255, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <!-- Redirect check -->
+    <script>
+        if (!localStorage.getItem("sessionToken")) {
+            window.location.href = "login.html";
+        }
+    </script>
+
+    <aside>
+        <div>
+            <div id="app-logo" class="brand">ORBIT<span style="color:#00e5ff">X</span></div>
+            <nav>
+                <button id="nav-space-notes" class="active" onclick="switchTab('SpaceNotes', this)">Space Notes AI</button>
+                <button id="nav-satellite-radar" onclick="switchTab('LiveTracking', this)">Satellite Radar</button>
+                <button id="nav-planet-explorer" onclick="switchTab('SolarSystem3D', this)">Planet Explorer</button>
+                <button id="nav-space-chat" onclick="switchTab('SpaceChat', this)">Space Chat AI</button>
+                <button id="nav-launch-hub" onclick="switchTab('LaunchTracker', this)">Launch Hub</button>
+                <button id="nav-settings" onclick="switchTab('Settings', this)">System Settings</button>
+            </nav>
+        </div>
+
+        <div class="profile">
+            <h3 id="profile-name">Reddy RaghuVardhan</h3>
+            <p>Mission Commander</p>
+            <button id="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
+    </aside>
+
+    <main>
+        <h1 style="display:none;">OrbitX System Console</h1>
+        <h2 id="content-title" style="display:none;">Space Notes AI Module</h2>
+        <p id="content-desc" style="display:none;">Viewing active system component: Space Notes AI Module.</p>
+
+        <!-- panel 1: Space Notes AI -->
+        <div id="panel-SpaceNotes" class="tab-panel active">
+            <div class="card">
+                <h2>Space Notes AI</h2>
+                <p>Educational Synthesis Hub</p>
+                <form onsubmit="handleSearch(event)">
+                    <input type="text" id="notes-query" placeholder="Give notes about Jupiter..." style="width: 70%; padding: 10px; background: #0c1424; border: 1px solid #00e5ff33; border-radius: 6px; color: white;">
+                    <button type="submit" class="accent-btn">Generate</button>
+                </form>
+            </div>
+
+            <!-- Notes results content -->
+            <div id="notes-results" style="display:none;">
+                <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 id="topic-title-display">Topic: Jupiter (Jovian System Analysis)</h3>
+                    <button id="notes-print-btn" onclick="window.print()" style="background: rgba(0, 229, 255, 0.15); color: #00e5ff; border: 1px solid #00e5ff33; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Print / Save</button>
+                </div>
+
+                <div class="sub-tabs" style="margin-bottom: 20px;">
+                    <button id="subtab-short" class="active" onclick="switchSubTab('Short Notes')">Short Notes</button>
+                    <button id="subtab-detailed" onclick="switchSubTab('Detailed Analysis')">Detailed Analysis</button>
+                    <button id="subtab-pdf" onclick="switchSubTab('PDF Summary')">PDF Summary</button>
+                    <button id="subtab-flash" onclick="switchSubTab('Study Flashcards')">Study Flashcards</button>
+                </div>
+
+                <!-- Short Notes panel -->
+                <div id="notes-subpanel-short" class="notes-subpanel">
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div class="card" style="flex: 1; padding: 15px;">
+                            <div class="text-2xl font-black">99.8%</div>
+                            <div class="text-slate-400">AI CONFIDENCE</div>
+                        </div>
+                        <div class="card" style="flex: 1; padding: 15px;">
+                            <div class="text-2xl font-black">6 Mins</div>
+                            <div class="text-slate-400">STUDY TIME</div>
+                        </div>
+                        <div class="card" style="flex: 1; padding: 15px;">
+                            <div class="text-2xl font-black">3 Major Areas</div>
+                            <div class="text-slate-400">FOCUS COUNT</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h4 style="margin-top:0;">Synthesized Highlights</h4>
+                        <ul class="highlights-list" style="padding-left: 20px; line-height: 1.6;">
+                            <li><p>Jupiter is the largest planet in our Solar System, containing a mass 318 times greater than Earth.</p></li>
+                            <li><p>It is primarily composed of hydrogen (75%) and helium (24%) gases.</p></li>
+                            <li><p>The planet features the iconic Great Red Spot—a colossal, persistent anticyclonic storm wider than Earth.</p></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis panel -->
+                <div id="notes-subpanel-detailed" class="notes-subpanel" style="display:none;">
+                    <div class="card">
+                        <h4 class="text-lg font-black">Jupiter (Jovian System Analysis) - Detailed Analysis</h4>
+                        <p class="text-slate-300">Jupiter dominates the outer Solar System, acting as a gravitational anchor. Classified as a gas giant, it lacks a solid surface; its atmosphere thickens into liquid layers under extreme pressures.</p>
+                    </div>
+                </div>
+
+                <!-- PDF Summary panel -->
+                <div id="notes-subpanel-pdf" class="notes-subpanel" style="display:none; background: white; color: black; padding: 30px; border-radius: 12px;">
+                    <h2 style="color: black;">ORBITX AEROSPACE ACADEMY RESEARCH MANIFEST</h2>
+                    <div style="font-family: monospace;" id="pdf-ref-id">DOCUMENT REF ID: ORB-JUP-9981 • DATE: July 2026</div>
+                    <table style="color: black; margin-top: 15px;">
+                        <thead>
+                            <tr style="background: #f1f5f9;">
+                                <th>PARAMETER</th>
+                                <th>SCIENTIFIC VALUE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Target Object</td>
+                                <td>Jupiter</td>
+                            </tr>
+                            <tr>
+                                <td>Data Reliability</td>
+                                <td>Local Fallback Map</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Study Flashcards panel -->
+                <div id="notes-subpanel-flash" class="notes-subpanel" style="display:none; text-align: center;">
+                    <div id="card-index-display" style="font-weight: bold; margin-bottom: 10px;">CARD 1 OF 3</div>
+                    <div class="perspective-1000" onclick="flipCard()" style="background: #050914; border: 1px solid #00e5ff33; border-radius: 12px; height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; margin: 0 auto 15px auto; max-width: 400px; padding: 20px;">
+                        <p id="card-content" style="font-size: 16px; font-weight: bold;">What is the atmospheric composition of Jupiter?</p>
+                        <div id="card-reveal-prompt" style="font-size: 10px; color: #94a3b8; margin-top: 20px;">Click Card to Reveal Answer</div>
+                        <div id="card-answer" style="display:none; font-size: 14px; color: #00ff9d; margin-top: 20px;">
+                            <div>
+                                <span>Verified Answer</span>
+                            </div>
+                            <p>Approximately 75% hydrogen and 24% helium, with minor traces of methane, ammonia, and water vapor.</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: center; gap: 10px;">
+                        <button class="w-12 h-12" onclick="changeCard(-1)" style="padding: 8px 16px;">&lt; Prev</button>
+                        <button class="w-12 h-12" onclick="changeCard(1)" style="padding: 8px 16px;">Next &gt;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- panel 2: Satellite Radar -->
+        <div id="panel-LiveTracking" class="tab-panel">
+            <div class="card" style="display:flex; justify-content: space-between; align-items: center;">
+                <h2>Satellite Radar</h2>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="mute-radar-btn" class="cursor-pointer" onclick="toggleMute()" style="background: transparent; border: 1px solid #ffffff1a; border-radius: 6px; padding: 8px;">
+                        <svg class="lucide-volume-x" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M23 9l-6 6M17 9l6 6"/></svg>
+                    </button>
+                    <span id="downlink-latency-hud">Downlink Latency: 24.5 ms</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 20px;">
+                <div class="card" style="flex: 1;">
+                    <h3>Radar Configuration</h3>
+                    <div style="margin-bottom: 15px;">
+                        <div style="display:flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                            <span>Constellation Density</span>
+                            <span id="density-val-text">50 Nodes</span>
+                        </div>
+                        <input type="range" min="10" max="150" value="50" id="radar-density-slider" oninput="updateDensity(this.value)" style="width: 100%;">
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                            <span>Orbital Altitude</span>
+                            <span id="altitude-val-text">800 km</span>
+                        </div>
+                        <input type="range" min="200" max="2000" value="800" id="radar-altitude-slider" oninput="updateAltitude(this.value)" style="width: 100%;">
+                    </div>
+                </div>
+
+                <div class="card" style="flex: 1;">
+                    <h3>Proximity Defense</h3>
+                    <div>Current Warning Level: <div id="warning-badge" style="display: inline-block; padding: 4px 8px; background: rgba(0, 255, 157, 0.1); border: 1px solid #00ff9d; color: #00ff9d; border-radius: 4px; font-weight: bold;">LOW IMPACT</div></div>
+                    <div style="margin-top: 10px;">Distance to Base: <span id="dist-to-base-text" style="font-weight: bold;">3,420 km</span></div>
+                    <div>Approach bearing: <span style="font-weight: bold;">Northeast (45°)</span></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Live Vessel Telemetry</h3>
+                <div style="display: grid; grid-template-cols: 1fr 1fr 1fr; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8;">NORAD Ident</div>
+                        <span id="telemetry-norad" style="font-weight: bold; font-size:16px;">SAT-1000</span>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8;">Velocity vector</div>
+                        <span id="telemetry-velocity" style="font-weight: bold; font-size:16px; color:#00e5ff;">27,600 km/h</span>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8;">Orbital altitude</div>
+                        <span id="telemetry-altitude" style="font-weight: bold; font-size:16px; color:#00ff9d;">420 km</span>
+                    </div>
+                </div>
+                <canvas class="cursor-crosshair" style="display:none;"></canvas>
+            </div>
+
+            <div class="card">
+                <h3>Active Satellite Fleet Status</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Norad ID</th>
+                            <th>Name</th>
+                            <th>Altitude</th>
+                            <th>Speed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="cursor-pointer selected-row" onclick="selectFleetRow(0, 'SAT-1000', '27,600 km/h', '420 km')">
+                            <td>25544</td>
+                            <td>ISS (Zarya)</td>
+                            <td>420 km</td>
+                            <td>27,600 km/h</td>
+                        </tr>
+                        <tr class="cursor-pointer" onclick="selectFleetRow(1, 'SAT-1001', '28,120 km/h', '820 km')">
+                            <td>40001</td>
+                            <td>Starlink-E-101</td>
+                            <td>820 km</td>
+                            <td>28,120 km/h</td>
+                        </tr>
+                        <tr class="cursor-pointer" onclick="selectFleetRow(2, 'SAT-1002', '26,450 km/h', '1,200 km')">
+                            <td>40002</td>
+                            <td>OneWeb-B-102</td>
+                            <td>1,200 km</td>
+                            <td>26,450 km/h</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- panel 3: Planet Explorer (SolarSystem3D) -->
+        <div id="panel-SolarSystem3D" class="tab-panel">
+            <div class="card">
+                <h2>3D Solar System Simulator</h2>
+                <p>Viewing active system component: 3D Solar System Simulator.</p>
+            </div>
+        </div>
+
+        <!-- panel 4: Space Chat AI -->
+        <div id="panel-SpaceChat" class="tab-panel">
+            <div class="card">
+                <h2>Space Chat AI</h2>
+                <p>Q&A Telemetry Engine</p>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button class="glass-panel" onclick="clickPreset('How do I calculate Keplerian orbits?')" style="flex: 1; padding: 10px; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid rgba(0,229,255,0.15); border-radius: 8px; color: #e2e8f0; cursor: pointer;">
+                        <span style="font-size: 8px; color: #00e5ff; display: block;">Suggested Prompt</span>
+                        How do I calculate Keplerian orbits?
+                    </button>
+                    <button class="glass-panel" onclick="clickPreset('What is the escape velocity of Mars?')" style="flex: 1; padding: 10px; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid rgba(0,229,255,0.15); border-radius: 8px; color: #e2e8f0; cursor: pointer;">
+                        <span style="font-size: 8px; color: #00e5ff; display: block;">Suggested Prompt</span>
+                        What is the escape velocity of Mars?
+                    </button>
+                </div>
+
+                <div id="chat-messages-box" style="height: 200px; border: 1px solid rgba(255,255,255,0.05); background: #020409; border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px;">
+                    <div class="flex gap-3" style="display: flex; margin-bottom: 10px;">
+                        <div style="width: 30px; height: 30px; background: rgba(0, 229, 255, 0.15); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #00e5ff; font-weight: bold; margin-right: 10px;">AI</div>
+                        <div class="space-y-1">
+                            <div class="bg-white" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255,255,255,0.04); padding: 10px; border-radius: 12px; font-size: 13px;">Greetings, Commander! I am the OrbitX Cognitive Intelligence Assistant. Ask me anything about planetary parameters, orbital telemetry, or astrophysical concepts.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <form onsubmit="handleChatSubmit(event)">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="chat-input" placeholder="Ask OrbitX AI a scientific question..." style="flex: 1; padding: 10px; background: #070b16; border: 1px solid #00e5ff33; border-radius: 6px; color: white;">
+                        <button type="submit" class="accent-btn" style="padding: 10px 20px;">Send</button>
+                    </div>
+                </form>
+                <div class="animate-pulse" id="chat-typing-indicator" style="display:none; font-size: 12px; color: #00e5ff; margin-top: 5px;">AI Assistant is generating response...</div>
+            </div>
+        </div>
+
+        <!-- panel 5: Launch Hub -->
+        <div id="panel-LaunchTracker" class="tab-panel">
+            <div class="card">
+                <h2>Launch Hub</h2>
+                <p>Global Mission Scheduler</p>
+            </div>
+
+            <div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <!-- Card 1 -->
+                <div class="glass-panel card" style="display: flex; flex-direction: column; justify-content: space-between; height: 220px;">
+                    <div>
+                        <span class="tracking-widest" style="font-size:10px; color:#00e5ff;">SPACEX</span>
+                        <h3 style="margin: 5px 0;">Starlink Group 7-19</h3>
+                        <span class="rounded-full" style="padding: 2px 8px; background: rgba(0, 255, 157, 0.1); border: 1px solid #00ff9d; color: #00ff9d; border-radius: 10px; font-size: 10px;">SCHEDULED</span>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; margin: 10px 0;">
+                        <div>Booster: <span>Falcon 9 Block 5</span></div>
+                        <div class="location-container"><svg class="lucide-map-pin" style="display:none;"></svg><span>SLC-40, Cape Canaveral, FL</span></div>
+                    </div>
+                    <div class="font-mono" style="display: flex; gap: 5px;">
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>02</div>
+                            <div style="font-size: 7px; color: #555;">DAYS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>04</div>
+                            <div style="font-size: 7px; color: #555;">HRS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>12</div>
+                            <div style="font-size: 7px; color: #555;">MINS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>45</div>
+                            <div style="font-size: 7px; color: #555;">SECS</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; margin-top: 10px;">
+                        <a href="https://www.spacex.com/launches/" target="_blank" class="stream-link" style="color: #00e5ff; font-size: 11px; text-decoration: none;">Watch stream</a>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="glass-panel card" style="display: flex; flex-direction: column; justify-content: space-between; height: 220px;">
+                    <div>
+                        <span class="tracking-widest" style="font-size:10px; color:#00e5ff;">NASA</span>
+                        <h3 style="margin: 5px 0;">Artemis III Crewed Landing</h3>
+                        <span class="rounded-full" style="padding: 2px 8px; background: rgba(255, 45, 85, 0.1); border: 1px solid #ff2d55; color: #ff2d55; border-radius: 10px; font-size: 10px;">ACTIVE PREP</span>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; margin: 10px 0;">
+                        <div>Booster: <span>SLS Block 1B</span></div>
+                        <div class="location-container"><svg class="lucide-map-pin" style="display:none;"></svg><span>LC-39B, Kennedy Space Center, FL</span></div>
+                    </div>
+                    <div class="font-mono" style="display: flex; gap: 5px;">
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>450</div>
+                            <div style="font-size: 7px; color: #555;">DAYS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>00</div>
+                            <div style="font-size: 7px; color: #555;">HRS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>00</div>
+                            <div style="font-size: 7px; color: #555;">MINS</div>
+                        </div>
+                        <div class="bg-black/40" style="background: rgba(0,0,0,0.4); padding: 5px; border-radius: 6px; text-align: center; flex: 1;">
+                            <div>00</div>
+                            <div style="font-size: 7px; color: #555;">SECS</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; margin-top: 10px;">
+                        <a href="https://www.nasa.gov/live" target="_blank" class="stream-link" style="color: #00e5ff; font-size: 11px; text-decoration: none;">Watch stream</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- panel 6: System Settings -->
+        <div id="panel-Settings" class="tab-panel">
+            <div class="card">
+                <h2>System Settings</h2>
+                <p>Mission Command Console Config</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <!-- Telemetry Card -->
+                <div class="card">
+                    <h3>Telemetry System</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <div>
+                            <h4 style="margin:0;">Real-Time Satellite Feed</h4>
+                            <p style="margin:0; font-size:10px; color:#94a3b8;">Stream live orbital telemetry</p>
+                        </div>
+                        <button class="toggle-btn bg-cyber-cyan" onclick="toggleSettingsTelemetry(this)">
+                            <div class="toggle-circle"></div>
+                        </button>
+                    </div>
+                    <div>
+                        <label>Latency Threshold (ms)</label>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="range" min="50" max="1000" value="200" id="settings-latency-slider" oninput="updateSettingsLatency(this.value)" style="flex:1;">
+                            <span id="settings-latency-val" style="color:#00e5ff;">200ms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Card -->
+                <div class="card">
+                    <h3>AI Synthesis Engine</h3>
+                    <div style="margin-bottom: 15px;">
+                        <label>Active Cognitive Model</label>
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button id="model-pro-btn" class="active-model-btn" onclick="selectModel('pro')">Pro</button>
+                            <button id="model-flash-btn" class="active-model-btn active" onclick="selectModel('flash')">Flash</button>
+                            <button id="model-hybrid-btn" class="active-model-btn" onclick="selectModel('hybrid')">Hybrid-AI</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content: space-between;">
+                            <label>Confidence Filter</label>
+                            <span id="settings-confidence-val" style="color:#ff2d55;">95%</span>
+                        </div>
+                        <input type="range" min="80" max="100" value="95" id="settings-confidence-slider" oninput="updateConfidence(this.value)" style="width:100%;">
+                    </div>
+                </div>
+
+                <!-- Theme Card -->
+                <div class="card">
+                    <h3>Visual Aesthetics</h3>
+                    <label>Cosmic Dashboard Theme</label>
+                    <div style="display:flex; gap:10px; margin-top:5px;">
+                        <button id="theme-dark-btn" class="theme-btn active" onclick="selectTheme('dark')">Cosmic Dark</button>
+                        <button id="theme-aurora-btn" class="theme-btn" onclick="selectTheme('aurora')">Deep Aurora</button>
+                        <button id="theme-eclipse-btn" class="theme-btn" onclick="selectTheme('eclipse')">Solar Eclipse</button>
+                    </div>
+                </div>
+
+                <!-- Security Card -->
+                <div class="card">
+                    <h3>Security Protocols</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h4 style="margin:0;">Cross-Window Navigation Bridge</h4>
+                            <p style="margin:0; font-size:10px; color:#94a3b8;">Accept programmatic messages</p>
+                        </div>
+                        <span style="background: rgba(0, 255, 157, 0.1); border:1px solid #00ff9d; color:#00ff9d; font-size:9px; padding:2px 6px; border-radius:4px; font-weight:bold;">ACTIVE</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diagnostics Console -->
+            <div class="card" style="margin-top: 20px;">
+                <h3>Diagnostics Console</h3>
+                <div class="font-mono" style="background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; font-size: 11px; color: rgba(0, 229, 255, 0.7); line-height: 1.6;">
+                    <div>[SYSTEM] Initializing OrbitX Web Diagnostics...</div>
+                    <div>[SYSTEM] Web Workspace Version: 1.0 (Vite Developer Environment)</div>
+                    <div>[SYSTEM] Client navigation routing initialized (Standard Route Keys bound)</div>
+                    <div style="color: #00ff9d;">[OK] Navigation Bridge active. Awaiting external triggers...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.getElementById("profile-name").innerText = localStorage.getItem("userName") || "Guest User";
+
+        function switchTab(tabName, element) {
+            // Set buttons active
+            const buttons = document.querySelectorAll("nav button");
+            buttons.forEach(btn => btn.classList.remove("active"));
+            element.classList.add("active");
+
+            // Toggle panels
+            const panels = document.querySelectorAll(".tab-panel");
+            panels.forEach(p => p.classList.remove("active"));
+            
+            const targetPanel = document.getElementById("panel-" + tabName);
+            if (targetPanel) targetPanel.classList.add("active");
+
+            // Update content title
+            const titles = {
+                'SpaceNotes': 'Space Notes AI Module',
+                'LiveTracking': 'Satellite Radar Telemetry',
+                'SolarSystem3D': '3D Solar System Simulator',
+                'SpaceChat': 'Space Chat AI Workspace',
+                'LaunchTracker': 'Launch Hub Cockpit',
+                'Settings': 'System Settings Workspace'
+            };
+            document.getElementById("content-title").innerText = titles[tabName] || tabName;
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("sessionToken");
+            localStorage.removeItem("userName");
+            window.location.href = "login.html";
+        }
+
+        // Space Notes AI script
+        let currentFlashcardIdx = 0;
+        const flashcardsData = [
+            { q: "What is the atmospheric composition of Jupiter?", a: "Approximately 75% hydrogen and 24% helium, with minor traces of methane, ammonia, and water vapor." },
+            { q: "How big is the Great Red Spot storm?", a: "It is an anticyclonic storm approximately 1.3 times the width of Earth." },
+            { q: "Which Galilean moon is volcanically active?", a: "Io. Its volcanic eruptions are powered by tidal heating." }
+        ];
+
+        function handleSearch(event) {
+            event.preventDefault();
+            const query = document.getElementById("notes-query").value.trim().toLowerCase();
+            if (!query) return;
+
+            document.getElementById("notes-results").style.display = "block";
+            // Populate topic display
+            if (query.includes("mars")) {
+                document.getElementById("topic-title-display").innerText = "Topic: Mars (Red Planet Topography)";
+            } else {
+                document.getElementById("topic-title-display").innerText = "Topic: Jupiter (Jovian System Analysis)";
+            }
+            switchSubTab('Short Notes');
+        }
+
+        function switchSubTab(subTabName) {
+            // Reset active button class
+            const btns = document.querySelectorAll(".sub-tabs button");
+            btns.forEach(b => b.classList.remove("active"));
+            
+            // Map tab button elements
+            if (subTabName === 'Short Notes') document.getElementById("subtab-short").classList.add("active");
+            if (subTabName === 'Detailed Analysis') document.getElementById("subtab-detailed").classList.add("active");
+            if (subTabName === 'PDF Summary') document.getElementById("subtab-pdf").classList.add("active");
+            if (subTabName === 'Study Flashcards') document.getElementById("subtab-flash").classList.add("active");
+
+            // Hide/show panels
+            document.querySelectorAll(".notes-subpanel").forEach(p => p.style.display = "none");
+            
+            if (subTabName === 'Short Notes') document.getElementById("notes-subpanel-short").style.display = "block";
+            if (subTabName === 'Detailed Analysis') document.getElementById("notes-subpanel-detailed").style.display = "block";
+            if (subTabName === 'PDF Summary') document.getElementById("notes-subpanel-pdf").style.display = "block";
+            if (subTabName === 'Study Flashcards') {
+                document.getElementById("notes-subpanel-flash").style.display = "block";
+                currentFlashcardIdx = 0;
+                updateFlashcardDisplay();
+            }
+        }
+
+        function updateFlashcardDisplay() {
+            document.getElementById("card-index-display").innerText = `CARD ${currentFlashcardIdx + 1} OF ${flashcardsData.length}`;
+            document.getElementById("card-content").innerText = flashcardsData[currentFlashcardIdx].q;
+            document.getElementById("card-reveal-prompt").style.display = "block";
+            document.getElementById("card-answer").style.display = "none";
+            document.querySelector("#card-answer p").innerText = flashcardsData[currentFlashcardIdx].a;
+        }
+
+        function flipCard() {
+            const answerBox = document.getElementById("card-answer");
+            const promptBox = document.getElementById("card-reveal-prompt");
+            if (answerBox.style.display === "none") {
+                answerBox.style.display = "block";
+                promptBox.style.display = "none";
+            } else {
+                answerBox.style.display = "none";
+                promptBox.style.display = "block";
+            }
+        }
+
+        function changeCard(dir) {
+            currentFlashcardIdx += dir;
+            if (currentFlashcardIdx < 0) currentFlashcardIdx = 0;
+            if (currentFlashcardIdx >= flashcardsData.length) currentFlashcardIdx = flashcardsData.length - 1;
+            updateFlashcardDisplay();
+        }
+
+        // Settings scripts
+        function toggleSettingsTelemetry(btn) {
+            if (btn.classList.contains("bg-cyber-cyan")) {
+                btn.classList.remove("bg-cyber-cyan");
+                btn.classList.add("bg-white-8");
+            } else {
+                btn.classList.add("bg-cyber-cyan");
+                btn.classList.remove("bg-white-8");
+            }
+        }
+
+        function updateSettingsLatency(val) {
+            document.getElementById("settings-latency-val").innerText = val + "ms";
+        }
+
+        function selectModel(model) {
+            document.querySelectorAll(".active-model-btn").forEach(b => b.classList.remove("active"));
+            document.getElementById(`model-${model}-btn`).classList.add("active");
+        }
+
+        function updateConfidence(val) {
+            document.getElementById("settings-confidence-val").innerText = val + "%";
+        }
+
+        function selectTheme(theme) {
+            document.querySelectorAll(".theme-btn").forEach(b => b.classList.remove("active"));
+            document.getElementById(`theme-${theme}-btn`).classList.add("active");
+        }
+
+        // Radar scripts
+        let isMutedState = true;
+        function toggleMute() {
+            const btn = document.getElementById("mute-radar-btn");
+            isMutedState = !isMutedState;
+            if (isMutedState) {
+                btn.innerHTML = `<svg class="lucide-volume-x" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M23 9l-6 6M17 9l6 6"/></svg>`;
+            } else {
+                btn.innerHTML = `<svg class="lucide-volume-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+            }
+        }
+
+        function updateDensity(val) {
+            document.getElementById("density-val-text").innerText = val + " Nodes";
+        }
+
+        function updateAltitude(val) {
+            document.getElementById("altitude-val-text").val = val;
+            document.getElementById("altitude-val-text").innerText = val + " km";
+        }
+
+        function selectFleetRow(idx, norad, speed, alt) {
+            const rows = document.querySelectorAll("table tbody tr");
+            rows.forEach(r => r.classList.remove("selected-row"));
+            rows[idx].classList.add("selected-row");
+
+            document.getElementById("telemetry-norad").innerText = norad;
+            document.getElementById("telemetry-velocity").innerText = speed;
+            document.getElementById("telemetry-altitude").innerText = alt;
+        }
+
+        // Space Chat AI scripts
+        function clickPreset(msg) {
+            document.getElementById("chat-input").value = msg;
+            sendMessage(msg);
+        }
+
+        function handleChatSubmit(e) {
+            e.preventDefault();
+            const val = document.getElementById("chat-input").value.trim();
+            if (!val) return;
+            sendMessage(val);
+        }
+
+        function sendMessage(msg) {
+            const chatBox = document.getElementById("chat-messages-box");
+            
+            // Add user bubble
+            const userHtml = `
+                <div class="flex gap-3 ml-auto flex-row-reverse" style="display: flex; margin-bottom: 10px; justify-content: flex-end;">
+                    <div style="width: 30px; height: 30px; background: rgba(0, 229, 255, 0.1); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #3b82f6; font-weight: bold; margin-left: 10px;">U</div>
+                    <div class="space-y-1">
+                        <div class="bg-cyber-cyan" style="background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.2); padding: 10px; border-radius: 12px; font-size: 13px; color: white;">${msg}</div>
+                    </div>
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', userHtml);
+            document.getElementById("chat-input").value = "";
+
+            // Typing indicator
+            const indicator = document.getElementById("chat-typing-indicator");
+            indicator.style.display = "block";
+
+            setTimeout(() => {
+                indicator.style.display = "none";
+                let ans = `Command received. Querying galactic logs for: "${msg}".`;
+                if (msg.toLowerCase().includes("keplerian")) {
+                    ans = "Keplerian orbits are calculated using Kepler's three laws of planetary motion: Elliptical orbits, equal areas, and period-semimajor axis proportionality (T² ∝ a³).";
+                }
+                const aiHtml = `
+                    <div class="flex gap-3" style="display: flex; margin-bottom: 10px;">
+                        <div style="width: 30px; height: 30px; background: rgba(0, 229, 255, 0.15); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #00e5ff; font-weight: bold; margin-right: 10px;">AI</div>
+                        <div class="space-y-1">
+                            <div class="bg-white" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255,255,255,0.04); padding: 10px; border-radius: 12px; font-size: 13px;">${ans}</div>
+                        </div>
+                    </div>
+                `;
+                chatBox.insertAdjacentHTML('beforeend', aiHtml);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+name: Selenium E2E Automation CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    name: Run E2E Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install Google Chrome
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r automation/requirements.txt
+
+    - name: Run Pytest Selenium E2E Tests
+      env:
+        BASE_URL: ${{ secrets.BASE_URL }}
+        ORBITX_USERNAME: ${{ secrets.USERNAME }}
+        ORBITX_PASSWORD: ${{ secrets.PASSWORD }}
+      # Run pytest, generate HTML, JUnit XML and test results reports.
+      # We use 'continue-on-error: true' to ensure that even if tests fail,
+      # the workflow continues to the next step to upload reports.
+      run: |
+        pytest automation/tests/test_ui_flows.py --junitxml=automation/reports/junit.xml --html=automation/reports/report.html --self-contained-html
+      continue-on-error: true
+
+    - name: Upload Test Reports and Screenshots Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-reports-and-results
+        path: |
+          automation/reports/report.html
+          automation/reports/junit.xml
+          automation/reports/test-results.xlsx
+          automation/reports/screenshots/
+        if-no-files-found: warn
+
+    - name: Verify Test Success and Fail Workflow if Needed
+      # If JUnit XML report exists, parse it to check for failures/errors.
+      # If there are any failures or errors, fail the workflow run.
+      run: |
+        if [ -f automation/reports/junit.xml ]; then
+          if grep -q -E 'failures="[1-9]|errors="[1-9]' automation/reports/junit.xml; then
+            echo "E2E tests failed! Please download the artifact to review screenshots and logs."
+            exit 1
+          else
+            echo "All E2E tests passed successfully!"
+          fi
+        else
+          echo "JUnit report was not generated."
+          exit 1
+        fi

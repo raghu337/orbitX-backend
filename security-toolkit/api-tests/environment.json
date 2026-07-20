@@ -1,0 +1,30 @@
+{
+  "id": "orbitx-env-config",
+  "name": "OrbitX Env Config Template",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "text",
+      "enabled": true
+    },
+    {
+      "key": "test_user",
+      "value": "commander@orbitx.com",
+      "type": "text",
+      "enabled": true
+    },
+    {
+      "key": "test_password",
+      "value": "securepassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "bearer_token",
+      "value": "",
+      "type": "text",
+      "enabled": true
+    }
+  ]
+}

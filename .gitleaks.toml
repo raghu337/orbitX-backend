@@ -1,0 +1,25 @@
+# Gitleaks Configuration for OrbitX
+
+[extend]
+# Extend default gitleaks configuration if available, or define custom rules below
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for files, paths, and generic false positives"
+paths = [
+    '''node_modules/''',
+    '''venv/''',
+    '''.git/''',
+    '''.expo/''',
+    '''dist/''',
+    '''reports/''',
+    '''security-reports/''',
+    '''package-lock\.json''',
+    '''pnpm-lock\.yaml''',
+    '''yarn\.lock'''
+]
+regexes = [
+    # Allow local simulated test credentials in automation suites
+    '''"astronaut@orbitx\.com"''',
+    '''"password123"'''
+]
