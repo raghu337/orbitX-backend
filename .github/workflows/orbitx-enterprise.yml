@@ -211,9 +211,37 @@ jobs:
     name: "⚡ Performance Testing (k6)"
     needs: build-backend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Python Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install k6 & python packages
         run: |
           mkdir -p reports
@@ -221,7 +249,14 @@ jobs:
           curl -s https://packages.k6.io/key.gpg | sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --import
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://packages.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list || true
           sudo apt-get update || true
-          sudo apt-get install k6 -y || true
+          sudo apt-get install k6 -y || (
+            echo "⚠️ Repository install failed. Downloading k6 binary directly..."
+            wget -q https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz
+            tar -xzf k6-v0.49.0-linux-amd64.tar.gz
+            sudo mv k6-v0.49.0-linux-amd64/k6 /usr/bin/k6
+          )
+          k6 version
+
       - name: Start FastAPI in background
         env:
           SECRET_KEY: "perf_test_secret_key"
@@ -230,39 +265,80 @@ jobs:
         run: |
           cd backend
           nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../reports/uvicorn.log 2>&1 &
+          echo "FastAPI pid: $!"
           cd ..
+
       - name: Wait for Backend Health Check
         run: |
+          echo "============================================="
+          echo "⏱️ Waiting for backend to become healthy..."
+          echo "============================================="
           BASE_URL="http://127.0.0.1:8000"
-          max_attempts=30
+          echo "Target Health Check Endpoint: $BASE_URL/health"
+          
+          max_attempts=20
           attempt=1
           success=false
+          
           while [ $attempt -le $max_attempts ]; do
+            echo "[Attempt $attempt/$max_attempts] Retrying every 15 seconds. Checking health on $BASE_URL/health..."
             if curl -s -f "$BASE_URL/health" > /dev/null; then
+              echo "🟢 Backend is healthy and responding!"
               success=true
               break
             fi
-            sleep 2
+            sleep 15
             attempt=$((attempt + 1))
           done
+          
           if [ "$success" = "false" ]; then
+            echo "❌ Error: Backend failed to respond after $((max_attempts * 15)) seconds."
+            echo "Uvicorn logs:"
             cat reports/uvicorn.log || true
             exit 1
           fi
+
+      - name: Verify HTTP 200 before load tests
+        run: |
+          BASE_URL="http://127.0.0.1:8000"
+          status_code=$(curl -o /dev/null -s -w "%{http_code}" "$BASE_URL/health")
+          echo "HTTP Status Code: $status_code"
+          if [ "$status_code" -ne 200 ]; then
+            echo "❌ Error: Health check did not return HTTP 200. Got: $status_code"
+            exit 1
+          fi
+
       - name: Run k6 Load Test
         env:
           K6_TARGET_URL: "http://127.0.0.1:8000"
         run: |
           k6 run scripts/load_test.js
+          echo "$?" > reports/k6-exit-code.txt
+
       - name: Parse Performance Reports
         if: always()
-        run: python scripts/parse_k6.py || true
+        run: python scripts/parse_k6.py
+
       - name: Upload Performance Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: performance-reports
           path: reports/
+
+      - name: Check k6 Run Exit Code
+        run: |
+          if [ -f reports/k6-exit-code.txt ]; then
+            EXIT_CODE=$(cat reports/k6-exit-code.txt)
+            echo "k6 finished with exit code: $EXIT_CODE"
+            if [ "$EXIT_CODE" -ne 0 ]; then
+              echo "❌ k6 performance load test failed threshold limits."
+              exit $EXIT_CODE
+            fi
+          else
+            echo "❌ k6 exit code file not found. Assuming runner error."
+            exit 1
+          fi
 
   # 15. Security Scanning
   security-scan:

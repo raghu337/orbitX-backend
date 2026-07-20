@@ -2,10 +2,19 @@ name: "⚡ Performance Testing (k6)"
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   workflow_dispatch:
+
+concurrency:
+  group: k6-performance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   performance-test:
@@ -26,6 +35,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Python Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install Backend Dependencies
         run: |
           echo "============================================="
@@ -33,7 +63,7 @@ jobs:
           echo "============================================="
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install uvicorn httpx
+          pip install uvicorn httpx openpyxl
 
       - name: Install k6
         run: |
@@ -76,25 +106,25 @@ jobs:
           echo "⏱️ Waiting for backend to become healthy..."
           echo "============================================="
           BASE_URL="http://127.0.0.1:8000"
-          echo "Detected BASE_URL: $BASE_URL"
+          echo "Target Health Check Endpoint: $BASE_URL/health"
           
-          max_attempts=30
+          max_attempts=20
           attempt=1
           success=false
           
           while [ $attempt -le $max_attempts ]; do
-            echo "[Attempt $attempt/$max_attempts] Checking health on $BASE_URL/health..."
+            echo "[Attempt $attempt/$max_attempts] Retrying every 15 seconds. Checking health on $BASE_URL/health..."
             if curl -s -f "$BASE_URL/health" > /dev/null; then
               echo "🟢 Backend is healthy and responding!"
               success=true
               break
             fi
-            sleep 5
+            sleep 15
             attempt=$((attempt + 1))
           done
           
           if [ "$success" = "false" ]; then
-            echo "❌ Error: Backend failed to respond after $((max_attempts * 5)) seconds."
+            echo "❌ Error: Backend failed to respond after $((max_attempts * 15)) seconds."
             echo "Uvicorn logs:"
             cat reports/uvicorn.log || true
             exit 1
@@ -112,15 +142,17 @@ jobs:
           fi
 
       - name: Run k6 Performance Test
+        env:
+          K6_TARGET_URL: "http://127.0.0.1:8000"
         run: |
           echo "============================================="
           echo "⚡ Running k6 Performance Load Tests..."
           echo "============================================="
           k6 run scripts/load_test.js
+          echo "$?" > reports/k6-exit-code.txt
 
       - name: Parse and Format Performance Reports
         if: always()
-        continue-on-error: true
         run: |
           echo "============================================="
           echo "📊 Parsing k6 report JSON..."
@@ -133,3 +165,17 @@ jobs:
         with:
           name: performance-reports
           path: reports/
+
+      - name: Check k6 Run Exit Code
+        run: |
+          if [ -f reports/k6-exit-code.txt ]; then
+            EXIT_CODE=$(cat reports/k6-exit-code.txt)
+            echo "k6 finished with exit code: $EXIT_CODE"
+            if [ "$EXIT_CODE" -ne 0 ]; then
+              echo "❌ k6 performance load test failed threshold limits."
+              exit $EXIT_CODE
+            fi
+          else
+            echo "❌ k6 exit code file not found. Assuming runner error."
+            exit 1
+          fi
