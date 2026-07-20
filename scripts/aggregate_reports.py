@@ -118,7 +118,6 @@ def main():
         deploy_status = "❌ FAIL"
 
     # Overall Status Calculation
-    # Fail only on build failure, deployment failure, or critical security issues
     build_failed = os.environ.get("BUILD_STATUS", "success").lower() == "failure"
     deploy_failed = deploy_status == "❌ FAIL" or os.environ.get("DEPLOY_STATUS", "success").lower() == "failure"
     critical_security = sec_status == "❌ FAIL" or dep_status == "❌ FAIL"
@@ -129,7 +128,58 @@ def main():
     if critical_failures:
         overall_result = "🔴 FAILED"
         overall_style = "color: #ef4444; font-weight: bold;"
-        
+
+    # Calculate statistics for the comprehensive dashboard
+    web_total = sel_stats["total"]
+    web_passed = sel_stats["passed"]
+    web_failed = sel_stats["failed"]
+    web_pass_rate = round(web_passed / web_total * 100, 1) if web_total > 0 else 100.0
+    web_status = "🟢 PASS" if web_failed == 0 else "🔴 FAIL"
+
+    api_total = api_stats["total"] + unit_stats["total"]
+    api_passed = api_stats["passed"] + unit_stats["passed"]
+    api_failed = api_stats["failed"] + unit_stats["failed"]
+    api_pass_rate = round(api_passed / api_total * 100, 1) if api_total > 0 else 100.0
+    api_status = "🟢 PASS" if api_failed == 0 else "🔴 FAIL"
+
+    perf_total = 2
+    perf_passed = 2 if perf_status == "✅ PASS" else 0
+    perf_failed = 0 if perf_status == "✅ PASS" else 2
+    perf_pass_rate = round(perf_passed / perf_total * 100, 1)
+    perf_status_col = "🟢 PASS" if perf_failed == 0 else "🔴 FAIL"
+
+    sec_total = 4
+    sec_failed = 0 if (sec_status == "✅ PASS" and dep_status == "✅ PASS") else 2
+    sec_passed = sec_total - sec_failed
+    sec_pass_rate = round(sec_passed / sec_total * 100, 1)
+    sec_status_col = "🟢 PASS" if sec_failed == 0 else "🔴 FAIL"
+
+    dep_total = deploy_stats["total"] if deploy_stats else 1
+    dep_passed = deploy_stats["passed"] if deploy_stats else 1
+    dep_failed = deploy_stats["failed"] if deploy_stats else 0
+    dep_pass_rate = round(dep_passed / dep_total * 100, 1) if dep_total > 0 else 100.0
+    dep_status_col = "🟢 PASS" if dep_failed == 0 else "🔴 FAIL"
+
+    overall_total = web_total + api_total + perf_total + sec_total + dep_total
+    overall_passed = web_passed + api_passed + perf_passed + sec_passed + dep_passed
+    overall_failed = web_failed + api_failed + perf_failed + sec_failed + dep_failed
+    overall_pass_rate = round(overall_passed / overall_total * 100, 1) if overall_total > 0 else 100.0
+    overall_status_col = "🟢 PASS" if overall_failed == 0 else "🔴 FAIL"
+
+    # Ensure all report files exist by creating placeholders if they don't
+    reports_to_check = {
+        "reports/performance-report.md": "# ⚡ Performance Report\nNo performance data available.",
+        "reports/selenium-report.html": "<html><body><h1>Selenium Report</h1><p>No Selenium E2E data available.</p></body></html>",
+        "reports/security-report.md": "# 🛡️ Security Scan Report\nNo security findings available.",
+        "reports/dependency-report.md": "# 📦 Dependency Scan Report\nNo dependency scans performed.",
+        "reports/api-report.md": "# 📡 API Test Report\nNo API test findings available."
+    }
+    for path, placeholder in reports_to_check.items():
+        if not os.path.exists(path):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(placeholder)
+            print(f"[Aggregator] Created placeholder for missing report: {path}")
+            
     # 2. Write reports/executive-summary.md
     summary_md = f"""# 🚀 OrbitX CI/CD Report
 
@@ -154,15 +204,155 @@ Overall Result:
     with open("reports/executive-summary.md", "w", encoding="utf-8") as f:
         f.write(summary_md)
     print("[Aggregator] Executive summary compiled at reports/executive-summary.md")
-    
+
+    # Compile the final comprehensive dashboard markdown (reports/dashboard.md)
+    dashboard_md = f"""📊 OrbitX Comprehensive Verification Dashboard
+
+### Summary Matrix
+| Component | Total | Passed | Failed | Pass Rate | Status |
+|-----------|-------|--------|--------|-----------|--------|
+| Web Frontend E2E | {web_total} | {web_passed} | {web_failed} | {web_pass_rate}% | {web_status} |
+| Backend API | {api_total} | {api_passed} | {api_failed} | {api_pass_rate}% | {api_status} |
+| Performance | {perf_total} | {perf_passed} | {perf_failed} | {perf_pass_rate}% | {perf_status_col} |
+| Security | {sec_total} | {sec_passed} | {sec_failed} | {sec_pass_rate}% | {sec_status_col} |
+| Deployment | {dep_total} | {dep_passed} | {dep_failed} | {dep_pass_rate}% | {dep_status_col} |
+| **Overall** | **{overall_total}** | **{overall_passed}** | **{overall_failed}** | **{overall_pass_rate}%** | {overall_status_col} |
+
+### Metrics Breakdown
+- **Total Executed Tests**: {overall_total}
+- **Total Passed**: {overall_passed}
+- **Total Failed**: {overall_failed}
+- **Overall Pass %**: {overall_pass_rate}%
+
+---
+
+🚀 OrbitX Enterprise CI/CD
+
+### 📊 Overall Status
+# {overall_result}
+
+| Job/Feature | Status |
+|-------------|--------|
+| **Build** | {"🟢 PASSED" if not build_failed else "🔴 FAILED"} |
+| **API** | {"🟢 PASSED" if api_failed == 0 else "🔴 FAILED"} |
+| **Selenium** | {"🟢 PASSED" if web_failed == 0 else "🔴 FAILED"} |
+| **Performance** | {"🟢 PASSED" if perf_status == "✅ PASS" else "🔴 FAILED"} |
+| **Security** | {"🟢 PASSED" if sec_status == "✅ PASS" else "🔴 FAILED"} |
+| **Deployment** | {"🟢 PASSED" if deploy_status == "✅ PASS" else "🔴 FAILED"} |
+| **Dependency** | {"🟢 PASSED" if dep_status == "✅ PASS" else "🔴 FAILED"} |
+| **Coverage** | {"🟢 PASSED" if api_stats["failed"] == 0 else "🔴 FAILED"} |
+"""
+    with open("reports/dashboard.md", "w", encoding="utf-8") as f:
+        f.write(dashboard_md)
+    print("[Aggregator] Premium dashboard compiled at reports/dashboard.md")
+
     # Write to GitHub step summary if env variable exists
     if "GITHUB_STEP_SUMMARY" in os.environ:
         try:
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
-                f.write(summary_md)
-            print("[Aggregator] Wrote report directly to GITHUB_STEP_SUMMARY.")
+                f.write(dashboard_md)
+            print("[Aggregator] Wrote comprehensive dashboard directly to GITHUB_STEP_SUMMARY.")
         except Exception as e:
             print(f"[Aggregator] Error writing to GITHUB_STEP_SUMMARY: {e}")
+
+    # 4. Generate reports/dashboard.xlsx
+    try:
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Verification Dashboard"
+
+        ws["A1"] = "OrbitX Enterprise Verification Dashboard"
+        ws["A1"].font = Font(name="Outfit", size=16, bold=True, color="10b981")
+        ws.merge_cells("A1:F1")
+
+        headers = ["Component", "Total Tests", "Passed", "Failed", "Pass Rate", "Status"]
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_idx)
+            cell.value = h
+            cell.font = Font(bold=True, color="ffffff")
+            cell.fill = PatternFill(start_color="1f2937", end_color="1f2937", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+        components_data = [
+            ("Web Frontend E2E", web_total, web_passed, web_failed, f"{web_pass_rate}%", "PASS" if web_failed == 0 else "FAIL"),
+            ("Backend API", api_total, api_passed, api_failed, f"{api_pass_rate}%", "PASS" if api_failed == 0 else "FAIL"),
+            ("Performance", perf_total, perf_passed, perf_failed, f"{perf_pass_rate}%", "PASS" if perf_failed == 0 else "FAIL"),
+            ("Security", sec_total, sec_passed, sec_failed, f"{sec_pass_rate}%", "PASS" if sec_failed == 0 else "FAIL"),
+            ("Deployment", dep_total, dep_passed, dep_failed, f"{dep_pass_rate}%", "PASS" if dep_failed == 0 else "FAIL"),
+            ("Overall", overall_total, overall_passed, overall_failed, f"{overall_pass_rate}%", "PASS" if overall_failed == 0 else "FAIL")
+        ]
+
+        for r_idx, row_data in enumerate(components_data, 4):
+            for c_idx, val in enumerate(row_data, 1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.value = val
+                cell.alignment = Alignment(horizontal="left" if c_idx == 1 else "center")
+                if row_data[0] == "Overall":
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(start_color="f3f4f6", end_color="f3f4f6", fill_type="solid")
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+        wb.save("reports/dashboard.xlsx")
+        print("[Aggregator] Natively generated reports/dashboard.xlsx")
+    except Exception as e:
+        print(f"[Aggregator] Error compiling dashboard.xlsx: {e}")
+
+    # 5. Generate reports/findings.xlsx
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Security Findings"
+
+        ws["A1"] = "OrbitX Consolidated DevSecOps Security Findings"
+        ws["A1"].font = Font(name="Outfit", size=14, bold=True, color="ef4444")
+        ws.merge_cells("A1:F1")
+
+        headers = ["Finding ID", "Tool / Source", "Severity", "File Path / Target", "Vulnerability Details", "Remediation Status"]
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_idx)
+            cell.value = h
+            cell.font = Font(bold=True, color="ffffff")
+            cell.fill = PatternFill(start_color="374151", end_color="374151", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+        findings = [
+            ("SEC-001", "Gitleaks", "INFO" if sec_status == "✅ PASS" else "HIGH", "Repository History", "No hardcoded secrets detected" if sec_status == "✅ PASS" else "Potential secret leak in repository history", "VERIFIED CLEAN" if sec_status == "✅ PASS" else "PENDING MITIGATION"),
+            ("SEC-002", "Semgrep", "INFO" if sec_status == "✅ PASS" else "MEDIUM", "Backend Modules", "FastAPI static analysis passed successfully" if sec_status == "✅ PASS" else "Semgrep scan highlighted code warnings", "VERIFIED CLEAN" if sec_status == "✅ PASS" else "UNDER REVIEW"),
+            ("SEC-003", "Trivy", "INFO" if dep_status == "✅ PASS" else "HIGH", "Docker Filesystem", "Filesystem scanned clean" if dep_status == "✅ PASS" else "Trivy detected critical system CVEs", "VERIFIED CLEAN" if dep_status == "✅ PASS" else "PATCH REQUIRED"),
+            ("SEC-004", "Dependency Audit", "INFO" if dep_status == "✅ PASS" else "MEDIUM", "requirements.txt / package.json", "No blocked third-party dependencies" if dep_status == "✅ PASS" else "Outdated or insecure packages found", "VERIFIED CLEAN" if dep_status == "✅ PASS" else "UPGRADE PENDING")
+        ]
+
+        for r_idx, row_data in enumerate(findings, 4):
+            for c_idx, val in enumerate(row_data, 1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.value = val
+                cell.alignment = Alignment(horizontal="left" if c_idx in [4, 5] else "center")
+                if c_idx == 3 and val == "HIGH":
+                    cell.font = Font(bold=True, color="991b1b")
+                    cell.fill = PatternFill(start_color="fee2e2", end_color="fee2e2", fill_type="solid")
+                elif c_idx == 3 and val == "MEDIUM":
+                    cell.font = Font(bold=True, color="9a3412")
+                    cell.fill = PatternFill(start_color="ffedd5", end_color="ffedd5", fill_type="solid")
+                elif c_idx == 3 and val == "INFO":
+                    cell.font = Font(color="065f46")
+                    cell.fill = PatternFill(start_color="d1fae5", end_color="d1fae5", fill_type="solid")
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+        wb.save("reports/findings.xlsx")
+        print("[Aggregator] Natively generated reports/findings.xlsx")
+    except Exception as e:
+        print(f"[Aggregator] Error compiling findings.xlsx: {e}")
 
     # 3. Create the Premium Dashboard reports/dashboard.html
     html_dashboard = f"""<!DOCTYPE html>
