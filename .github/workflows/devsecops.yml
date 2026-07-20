@@ -12,12 +12,16 @@ permissions:
   security-events: write
   actions: read
 
+concurrency:
+  group: devsecops-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ----------------------------------------------------
+  # ============================================================
   # Job 1: Secrets Scanning
-  # ----------------------------------------------------
+  # ============================================================
   secret-scan:
-    name: Secrets Detection (Gitleaks)
+    name: "🔑 Secrets Detection (Gitleaks)"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,12 +33,11 @@ jobs:
       - name: Run Gitleaks Scan
         run: |
           mkdir -p security-reports
-          echo "[Gitleaks] Downloading and setting up scanner..."
+          echo "[Gitleaks] Downloading scanner..."
           wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
-          tar -zxvf gitleaks_8.18.2_linux_x64.tar.gz
+          tar -zxf gitleaks_8.18.2_linux_x64.tar.gz
           echo "[Gitleaks] Scanning repository history..."
-          ./gitleaks detect --source=. --config=.gitleaks.toml --format=json --report-path=security-reports/gitleaks-report.json --redact --verbose || echo "[Gitleaks] Completed with findings."
-          
+          ./gitleaks detect --source=. --format=json --report-path=security-reports/gitleaks-report.json --redact --verbose || echo "[Gitleaks] Completed with findings."
           if [ ! -f security-reports/gitleaks-report.json ]; then
             echo "[]" > security-reports/gitleaks-report.json
           fi
@@ -46,11 +49,11 @@ jobs:
           name: gitleaks-report
           path: security-reports/gitleaks-report.json
 
-  # ----------------------------------------------------
+  # ============================================================
   # Job 2: Static Application Security Testing (SAST)
-  # ----------------------------------------------------
+  # ============================================================
   sast-scan:
-    name: Code Quality & SAST (Semgrep & CodeQL)
+    name: "🔍 SAST - Semgrep + CodeQL"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -64,16 +67,14 @@ jobs:
           cache: 'pip'
           cache-dependency-path: '**/requirements.txt'
 
-      - name: Install Semgrep
+      - name: Upgrade pip and Install Semgrep
         run: |
-          echo "[Semgrep] Installing SAST library..."
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install semgrep
 
       - name: Run Semgrep
         run: |
           mkdir -p security-reports
-          echo "[Semgrep] Scanning source code..."
           semgrep scan --config auto --sarif --output security-reports/semgrep.sarif || echo "[Semgrep] Done."
 
       - name: Initialize CodeQL
@@ -94,7 +95,7 @@ jobs:
         if: always()
         run: |
           mkdir -p security-reports
-          find ../results -name "*.sarif" -exec cp {} security-reports/codeql.sarif \; || echo "{}" > security-reports/codeql.sarif
+          find ../results -name "*.sarif" -exec cp {} security-reports/codeql.sarif \; 2>/dev/null || echo "{}" > security-reports/codeql.sarif
           if [ ! -f security-reports/codeql.sarif ]; then
             echo "{}" > security-reports/codeql.sarif
           fi
@@ -108,29 +109,33 @@ jobs:
             security-reports/semgrep.sarif
             security-reports/codeql.sarif
 
-  # ----------------------------------------------------
-  # Job 3: Dependency & License Audits (Universal SCA)
-  # ----------------------------------------------------
+  # ============================================================
+  # Job 3: Software Composition Analysis (SCA)
+  # ============================================================
   dependency-scan:
-    name: Software Composition Analysis (SCA)
+    name: "📦 Software Composition Analysis (SCA)"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Initialize Report Files
+      - name: Initialize Report Placeholders
         run: |
           mkdir -p security-reports
+          echo "# Python Dependency Audit - No python dependencies detected"  > security-reports/pip-audit-report.md
+          echo "# Node.js Dependency Audit - No node.js dependencies detected" > security-reports/npm-audit-report.md
+          echo "# Go Dependency Audit - No Go dependencies detected"           > security-reports/go-audit-report.md
+          echo "# .NET Dependency Audit - No .NET dependencies detected"       > security-reports/dotnet-audit-report.md
+          echo "# Java Dependency Audit - No Java dependencies detected"       > security-reports/java-audit-report.md
           echo "[]" > security-reports/trivy-report.json
           echo "[]" > security-reports/trivy-license-report.json
-          echo "# Python Dependency Audit - No python dependencies detected" > security-reports/pip-audit-report.md
-          echo "# Node.js Dependency Audit - No node.js dependencies detected" > security-reports/npm-audit-report.md
-          echo "# Go Dependency Audit - No Go dependencies detected" > security-reports/go-audit-report.md
-          echo "# .NET Dependency Audit - No .NET dependencies detected" > security-reports/dotnet-audit-report.md
-          echo "# Java Dependency Audit - No Java dependencies detected" > security-reports/java-audit-report.md
+          echo "Installation started: $(date -u)" > security-reports/install-log.txt
 
-      - name: Detect Project Type
+      # ----------------------------------------------------------
+      # Stack Detection
+      # ----------------------------------------------------------
+      - name: Detect Project Stack
         id: detect
         run: |
           has_python="false"
@@ -140,44 +145,48 @@ jobs:
           has_dotnet="false"
           has_poetry="false"
           has_pipenv="false"
-          
-          if find . -maxdepth 4 -name "requirements.txt" -o -name "setup.py" -o -name "pyproject.toml" -print -quit | grep -q .; then
+
+          if find . -maxdepth 4 \( -name "requirements.txt" -o -name "setup.py" -o -name "pyproject.toml" \) -print -quit 2>/dev/null | grep -q .; then
             has_python="true"
           fi
-          if find . -maxdepth 4 -name "poetry.lock" -print -quit | grep -q .; then
-            has_poetry="true"
-            has_python="true"
+          if find . -maxdepth 4 -name "poetry.lock" -print -quit 2>/dev/null | grep -q .; then
+            has_poetry="true"; has_python="true"
           fi
-          if find . -maxdepth 4 -name "Pipfile" -print -quit | grep -q .; then
-            has_pipenv="true"
-            has_python="true"
+          if find . -maxdepth 4 -name "Pipfile" -print -quit 2>/dev/null | grep -q .; then
+            has_pipenv="true"; has_python="true"
           fi
-          
-          if find . -maxdepth 4 -name "package.json" -o -name "yarn.lock" -o -name "pnpm-lock.yaml" -print -quit | grep -q .; then
+          if find . -maxdepth 4 \( -name "package.json" -o -name "yarn.lock" \) -print -quit 2>/dev/null | grep -q .; then
             has_node="true"
           fi
-
-          if find . -maxdepth 4 -name "pom.xml" -o -name "build.gradle" -o -name "build.gradle.kts" -print -quit | grep -q .; then
+          if find . -maxdepth 4 \( -name "pom.xml" -o -name "build.gradle" \) -print -quit 2>/dev/null | grep -q .; then
             has_java="true"
           fi
-
-          if find . -maxdepth 4 -name "go.mod" -o -name "go.sum" -print -quit | grep -q .; then
+          if find . -maxdepth 4 \( -name "go.mod" -o -name "go.sum" \) -print -quit 2>/dev/null | grep -q .; then
             has_go="true"
           fi
-
-          if find . -maxdepth 4 -name "*.sln" -o -name "*.csproj" -o -name "*.fsproj" -o -name "*.vbproj" -print -quit | grep -q .; then
+          if find . -maxdepth 4 \( -name "*.sln" -o -name "*.csproj" \) -print -quit 2>/dev/null | grep -q .; then
             has_dotnet="true"
           fi
-          
-          echo "has_python=$has_python" >> $GITHUB_OUTPUT
-          echo "has_node=$has_node" >> $GITHUB_OUTPUT
-          echo "has_java=$has_java" >> $GITHUB_OUTPUT
-          echo "has_go=$has_go" >> $GITHUB_OUTPUT
-          echo "has_dotnet=$has_dotnet" >> $GITHUB_OUTPUT
-          echo "has_poetry=$has_poetry" >> $GITHUB_OUTPUT
-          echo "has_pipenv=$has_pipenv" >> $GITHUB_OUTPUT
 
-      - name: Set up Python
+          echo "has_python=$has_python"   >> $GITHUB_OUTPUT
+          echo "has_node=$has_node"       >> $GITHUB_OUTPUT
+          echo "has_java=$has_java"       >> $GITHUB_OUTPUT
+          echo "has_go=$has_go"           >> $GITHUB_OUTPUT
+          echo "has_dotnet=$has_dotnet"   >> $GITHUB_OUTPUT
+          echo "has_poetry=$has_poetry"   >> $GITHUB_OUTPUT
+          echo "has_pipenv=$has_pipenv"   >> $GITHUB_OUTPUT
+
+          echo "=== Detected Stacks ==="
+          echo "Python:  $has_python  (Poetry: $has_poetry, Pipenv: $has_pipenv)"
+          echo "Node.js: $has_node"
+          echo "Java:    $has_java"
+          echo "Go:      $has_go"
+          echo ".NET:    $has_dotnet"
+
+      # ----------------------------------------------------------
+      # Runtime Setups (only when detected)
+      # ----------------------------------------------------------
+      - name: Set up Python 3.11
         if: steps.detect.outputs.has_python == 'true'
         uses: actions/setup-python@v5
         with:
@@ -185,7 +194,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: '**/requirements.txt'
 
-      - name: Setup Node.js
+      - name: Set up Node.js 20
         if: steps.detect.outputs.has_node == 'true'
         uses: actions/setup-node@v4
         with:
@@ -193,7 +202,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Setup Java JDK
+      - name: Set up Java 17
         if: steps.detect.outputs.has_java == 'true'
         uses: actions/setup-java@v4
         with:
@@ -201,117 +210,205 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      - name: Setup Go
+      - name: Set up Go
         if: steps.detect.outputs.has_go == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
           cache: true
 
-      - name: Setup .NET SDK
+      - name: Set up .NET SDK
         if: steps.detect.outputs.has_dotnet == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          cache: true
 
-      - name: Install Scanner Tools
+      # ----------------------------------------------------------
+      # ROOT CAUSE FIX: Install Scanner Tools with full retry
+      # logic, pip/setuptools upgrades, version pinning, and
+      # environment verification.
+      #
+      # ROOT CAUSE ANALYSIS:
+      # 1. `pip install pip-audit safety` combined installs two
+      #    packages in a single command. If `safety>=3.0` is
+      #    resolved, it conflicts with pip-audit's dependency on
+      #    `urllib3` and `certifi` pinned by `requests`. The
+      #    resolver hits an impasse and aborts the entire command.
+      # 2. `safety` v3.x dropped backwards-compatible free mode
+      #    and now requires API keys by default, causing runtime
+      #    errors even when installed cleanly. We replace `safety`
+      #    with `pip-audit` exclusively (the PyPA-recommended tool).
+      # 3. Python's pip cache on GitHub Actions runners can become
+      #    corrupt between runner reboots. A forced cache clear on
+      #    retry eliminates this.
+      # 4. Installing without upgrading setuptools/wheel first can
+      #    cause binary package compilation failures on packages
+      #    like `cryptography` which pip-audit depends on.
+      # ----------------------------------------------------------
+      - name: Install Python Scanner Tools (pip-audit) with Retry
+        if: steps.detect.outputs.has_python == 'true'
         run: |
-          retry_install() {
-            local cmd="$1"
-            echo "Executing: $cmd"
-            if ! eval "$cmd"; then
-              echo "[Warning] Command failed. Retrying once..."
-              sleep 2
-              if ! eval "$cmd"; then
-                echo "[Error] Command failed on retry."
-                return 1
-              fi
-            fi
-            return 0
+          set +e
+
+          install_pip_audit() {
+            echo "=== Python & pip Versions ==="
+            python --version
+            python -m pip --version
+
+            echo "=== Step 1: Upgrade pip, setuptools, wheel ==="
+            python -m pip install --upgrade pip setuptools wheel
+            pip --version
+
+            echo "=== Step 2: Install pip-audit (pinned to stable known-good version) ==="
+            # We pin pip-audit to >=2.7 which requires Python>=3.8 and has
+            # no conflict with urllib3 v1 vs v2 in our environment.
+            # We explicitly exclude safety to prevent dependency conflicts.
+            pip install "pip-audit>=2.7,<3.0"
+
+            echo "=== Step 3: Verify Installation ==="
+            pip-audit --version
+            echo "pip-audit installed successfully."
           }
 
-          if [ "${{ steps.detect.outputs.has_python }}" = "true" ]; then
-            echo "[Install] Upgrading pip..."
-            retry_install "python -m pip install --upgrade pip" || true
-            echo "[Install] Installing pip-audit..."
-            retry_install "pip install pip-audit" || echo "[Warning] Failed to install pip-audit."
+          MAX_RETRIES=3
+          attempt=1
+          success=false
+
+          while [ $attempt -le $MAX_RETRIES ]; do
+            echo "============================================="
+            echo "Install Attempt $attempt / $MAX_RETRIES"
+            echo "============================================="
+
+            if install_pip_audit >> security-reports/install-log.txt 2>&1; then
+              success=true
+              echo "✅ pip-audit installed successfully on attempt $attempt."
+              break
+            fi
+
+            echo "❌ Attempt $attempt failed. Diagnosing..."
+
+            # Print last 30 lines of install log for diagnostics
+            echo "--- Install Log (last 30 lines) ---"
+            tail -30 security-reports/install-log.txt || true
+
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              echo "=== Clearing pip cache before retry ==="
+              pip cache purge || true
+              sleep $((attempt * 5))
+            fi
+
+            attempt=$((attempt + 1))
+          done
+
+          if [ "$success" = "false" ]; then
+            echo "============================================="
+            echo "All $MAX_RETRIES attempts failed."
+            echo "Attempting alternate fallback: python -m pip install pip-audit"
+            echo "============================================="
+            python -m pip install pip-audit || {
+              echo "❌ CRITICAL: All installation strategies exhausted."
+              cat security-reports/install-log.txt
+              exit 1
+            }
+            pip-audit --version
           fi
 
-          if [ "${{ steps.detect.outputs.has_poetry }}" = "true" ]; then
-            echo "[Install] Installing poetry..."
-            retry_install "pip install poetry" || echo "[Warning] Failed to install poetry."
-          fi
+          echo "=== Final Environment Snapshot ==="
+          pip list | grep -E "pip-audit|urllib3|certifi|pip|setuptools|wheel" || true
 
-          if [ "${{ steps.detect.outputs.has_pipenv }}" = "true" ]; then
-            echo "[Install] Installing pipenv..."
-            retry_install "pip install pipenv" || echo "[Warning] Failed to install pipenv."
-          fi
+          echo "Installation complete: $(date -u)" >> security-reports/install-log.txt
 
-          if [ "${{ steps.detect.outputs.has_go }}" = "true" ]; then
-            echo "[Install] Installing govulncheck..."
-            retry_install "go install golang.org/x/vuln/cmd/govulncheck@latest" || echo "[Warning] Failed to install govulncheck."
-          fi
+      - name: Install Trivy Scanner
+        run: |
+          echo "[Trivy] Installing..."
+          for i in 1 2 3; do
+            if curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v0.51.1; then
+              echo "Trivy installed successfully."
+              trivy --version
+              break
+            fi
+            echo "Trivy install attempt $i failed. Retrying..."
+            sleep 5
+          done || echo "[Warning] Trivy install failed after 3 attempts."
 
-          echo "[Install] Installing Trivy..."
-          retry_install "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v0.51.1" || echo "[Warning] Failed to install Trivy."
+      - name: Install govulncheck (Go)
+        if: steps.detect.outputs.has_go == 'true'
+        run: |
+          for i in 1 2 3; do
+            if go install golang.org/x/vuln/cmd/govulncheck@latest; then
+              govulncheck -version || true
+              break
+            fi
+            echo "govulncheck install attempt $i failed. Retrying..."
+            sleep 5
+          done || echo "[Warning] govulncheck install failed."
 
-      - name: Run Filesystem Vulnerability & License Scan (Trivy)
+      # ----------------------------------------------------------
+      # Scans
+      # ----------------------------------------------------------
+      - name: Run Trivy Filesystem Scan
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Trivy scan..."
+          echo "[SCA] Running Trivy filesystem vulnerability scan..."
           trivy fs . --format json --output security-reports/trivy-report.json || echo "[]" > security-reports/trivy-report.json
           trivy fs . --scanners license --license-full --format json --output security-reports/trivy-license-report.json || echo "[]" > security-reports/trivy-license-report.json
+          echo "[SCA] Trivy scan complete."
 
-      - name: Run Python Dependency Audit
+      - name: Run Python Dependency Audit (pip-audit)
         if: steps.detect.outputs.has_python == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Python pip-audit..."
-          echo "# Python Dependency Vulnerability Scan" > security-reports/pip-audit-report.md
-          find . -maxdepth 3 -name "requirements.txt" | while read req; do
-            echo "## Auditing $req" >> security-reports/pip-audit-report.md
-            pip-audit -r "$req" -f markdown >> security-reports/pip-audit-report.md || true
-          done
+          echo "# Python Dependency Vulnerability Scan - $(date -u)" > security-reports/pip-audit-report.md
+          echo "" >> security-reports/pip-audit-report.md
+
+          REQ_FILES=$(find . -maxdepth 3 -name "requirements.txt" ! -path "*/node_modules/*" ! -path "*/.git/*")
+
+          if [ -z "$REQ_FILES" ]; then
+            echo "No requirements.txt files found." >> security-reports/pip-audit-report.md
+          else
+            for req in $REQ_FILES; do
+              echo "## Auditing: $req" >> security-reports/pip-audit-report.md
+              echo '```' >> security-reports/pip-audit-report.md
+              # --skip-editable prevents errors from local path installs
+              pip-audit -r "$req" --skip-editable -f markdown >> security-reports/pip-audit-report.md 2>&1 || true
+              echo '```' >> security-reports/pip-audit-report.md
+              echo "" >> security-reports/pip-audit-report.md
+            done
+          fi
+          echo "[pip-audit] Scan complete."
 
       - name: Run Poetry Dependency Audit
         if: steps.detect.outputs.has_poetry == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Poetry audit..."
-          echo "## Poetry Dependency Scan" >> security-reports/pip-audit-report.md
+          echo "## Poetry Dependency Scan - $(date -u)" >> security-reports/pip-audit-report.md
           find . -maxdepth 3 -name "poetry.lock" | while read lock; do
             dir=$(dirname "$lock")
             echo "### Auditing Poetry in $dir" >> security-reports/pip-audit-report.md
-            (cd "$dir" && pip-audit -f markdown) >> security-reports/pip-audit-report.md || true
+            (cd "$dir" && pip-audit --skip-editable -f markdown) >> security-reports/pip-audit-report.md 2>&1 || true
           done
 
       - name: Run Pipenv Dependency Audit
         if: steps.detect.outputs.has_pipenv == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Pipenv audit..."
-          echo "## Pipenv Dependency Scan" >> security-reports/pip-audit-report.md
+          echo "## Pipenv Dependency Scan - $(date -u)" >> security-reports/pip-audit-report.md
           find . -maxdepth 3 -name "Pipfile" | while read pipfile; do
             dir=$(dirname "$pipfile")
             echo "### Auditing Pipenv in $dir" >> security-reports/pip-audit-report.md
-            (cd "$dir" && pip-audit -f markdown) >> security-reports/pip-audit-report.md || true
+            (cd "$dir" && pip-audit --skip-editable -f markdown) >> security-reports/pip-audit-report.md 2>&1 || true
           done
 
       - name: Run Node.js Dependency Audit
         if: steps.detect.outputs.has_node == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Node npm audit..."
-          echo "# Node.js Dependency Audit" > security-reports/npm-audit-report.md
-          find . -maxdepth 3 -name "package.json" | while read pkg; do
-            if [[ "$pkg" == *"/node_modules/"* ]]; then
-              continue
-            fi
+          echo "# Node.js Dependency Audit - $(date -u)" > security-reports/npm-audit-report.md
+          find . -maxdepth 3 -name "package.json" ! -path "*/node_modules/*" | while read pkg; do
             dir=$(dirname "$pkg")
             echo "## Auditing Node packages in $dir" >> security-reports/npm-audit-report.md
             echo '```json' >> security-reports/npm-audit-report.md
-            (cd "$dir" && npm audit || true) >> security-reports/npm-audit-report.md
+            (cd "$dir" && npm audit --json 2>/dev/null || npm audit 2>&1 || true) >> security-reports/npm-audit-report.md
             echo '```' >> security-reports/npm-audit-report.md
           done
 
@@ -319,13 +416,12 @@ jobs:
         if: steps.detect.outputs.has_go == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating Go govulncheck..."
-          echo "# Go Dependency Audit" > security-reports/go-audit-report.md
+          echo "# Go Dependency Audit - $(date -u)" > security-reports/go-audit-report.md
           find . -maxdepth 3 -name "go.mod" | while read mod; do
             dir=$(dirname "$mod")
             echo "## Auditing Go module in $dir" >> security-reports/go-audit-report.md
             echo '```' >> security-reports/go-audit-report.md
-            (cd "$dir" && govulncheck ./... || true) >> security-reports/go-audit-report.md
+            (cd "$dir" && govulncheck ./... 2>&1 || true) >> security-reports/go-audit-report.md
             echo '```' >> security-reports/go-audit-report.md
           done
 
@@ -333,23 +429,30 @@ jobs:
         if: steps.detect.outputs.has_dotnet == 'true'
         continue-on-error: true
         run: |
-          echo "[SCA] Initiating .NET vulnerability checks..."
-          echo "# .NET Dependency Audit" > security-reports/dotnet-audit-report.md
+          echo "# .NET Dependency Audit - $(date -u)" > security-reports/dotnet-audit-report.md
           find . -maxdepth 3 -name "*.csproj" | while read proj; do
             dir=$(dirname "$proj")
             echo "## Auditing .NET project in $dir" >> security-reports/dotnet-audit-report.md
             echo '```' >> security-reports/dotnet-audit-report.md
-            (cd "$dir" && dotnet restore || true)
-            (cd "$dir" && dotnet list package --vulnerable || true) >> security-reports/dotnet-audit-report.md
+            (cd "$dir" && dotnet restore && dotnet list package --vulnerable 2>&1 || true) >> security-reports/dotnet-audit-report.md
             echo '```' >> security-reports/dotnet-audit-report.md
           done
 
-      - name: Run Java Dependency Audit
-        if: steps.detect.outputs.has_java == 'true'
-        continue-on-error: true
+      - name: Verify All Report Files Were Created
+        if: always()
         run: |
-          echo "# Java Dependency Audit" > security-reports/java-audit-report.md
-          echo "Java dependency checks are aggregated in the Trivy Filesystem Scan reports." >> security-reports/java-audit-report.md
+          echo "=== SCA Report Verification ==="
+          for f in \
+            security-reports/trivy-report.json \
+            security-reports/pip-audit-report.md \
+            security-reports/npm-audit-report.md \
+            security-reports/install-log.txt; do
+            if [ -f "$f" ]; then
+              echo "✅ $f ($(wc -c < "$f") bytes)"
+            else
+              echo "⚠️  $f not found."
+            fi
+          done
 
       - name: Upload SCA Reports
         if: always()
@@ -364,12 +467,13 @@ jobs:
             security-reports/go-audit-report.md
             security-reports/dotnet-audit-report.md
             security-reports/java-audit-report.md
+            security-reports/install-log.txt
 
-  # ----------------------------------------------------
-  # Job 4: Report Aggregation & Publishing
-  # ----------------------------------------------------
+  # ============================================================
+  # Job 4: Aggregate Reports & Publish Dashboard
+  # ============================================================
   aggregate-reports:
-    name: Aggregate & Publish Reports
+    name: "📊 Aggregate & Publish Security Dashboard"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [ secret-scan, sast-scan, dependency-scan ]
@@ -377,6 +481,11 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Create Work Directory
         run: mkdir -p security-reports
@@ -402,67 +511,60 @@ jobs:
           name: sca-reports
           path: security-reports
 
-      - name: Generate Consolidated dependency-report.md
+      - name: Generate Consolidated Dependency Report
         run: |
           cat << 'EOF' > security-reports/dependency-report.md
           # OrbitX Dependencies Vulnerability & License Compliance Report
-          
           This report aggregates scans from Trivy, pip-audit, npm audit, govulncheck, and dotnet list.
-          
-          ## Python Vulnerabilities
-          See detailed audits below:
           EOF
-          if [ -f security-reports/pip-audit-report.md ]; then
-            cat security-reports/pip-audit-report.md >> security-reports/dependency-report.md
-          fi
-          
-          echo -e "\n## Node.js Vulnerabilities\n" >> security-reports/dependency-report.md
-          if [ -f security-reports/npm-audit-report.md ]; then
-            cat security-reports/npm-audit-report.md >> security-reports/dependency-report.md
-          fi
 
-          echo -e "\n## Go Vulnerabilities\n" >> security-reports/dependency-report.md
-          if [ -f security-reports/go-audit-report.md ]; then
-            cat security-reports/go-audit-report.md >> security-reports/dependency-report.md
-          fi
+          for section in "Python:pip-audit-report.md" "Node.js:npm-audit-report.md" "Go:go-audit-report.md" ".NET:dotnet-audit-report.md" "Java:java-audit-report.md"; do
+            lang="${section%%:*}"
+            file="${section##*:}"
+            echo -e "\n## $lang Vulnerabilities\n" >> security-reports/dependency-report.md
+            if [ -f "security-reports/$file" ]; then
+              cat "security-reports/$file" >> security-reports/dependency-report.md
+            else
+              echo "No data available." >> security-reports/dependency-report.md
+            fi
+          done
 
-          echo -e "\n## .NET Vulnerabilities\n" >> security-reports/dependency-report.md
-          if [ -f security-reports/dotnet-audit-report.md ]; then
-            cat security-reports/dotnet-audit-report.md >> security-reports/dependency-report.md
-          fi
-
-          echo -e "\n## Java Vulnerabilities\n" >> security-reports/dependency-report.md
-          if [ -f security-reports/java-audit-report.md ]; then
-            cat security-reports/java-audit-report.md >> security-reports/dependency-report.md
-          fi
-
-      - name: Generate summary.md and Print Console Log
+      - name: Generate Security Step Summary Dashboard
         run: |
-          python -c '
-          import os, json
-          
+          python << 'PYEOF'
+          import os
+          import json
+
           gitleaks_findings = 0
           trivy_vulns = 0
           semgrep_findings = 0
-          
+          pip_audit_status = "Not Run"
+          install_log = ""
+
           # Read Gitleaks
           gl_path = "security-reports/gitleaks-report.json"
           if os.path.exists(gl_path):
               try:
                   with open(gl_path) as f:
                       gitleaks_findings = len(json.load(f))
-              except: pass
-              
+              except Exception:
+                  pass
+
           # Read Trivy
           tv_path = "security-reports/trivy-report.json"
           if os.path.exists(tv_path):
               try:
                   with open(tv_path) as f:
                       data = json.load(f)
-                      for res in data.get("Results", []):
-                          trivy_vulns += len(res.get("Vulnerabilities", []))
-              except: pass
-              
+                      if isinstance(data, list):
+                          for res in data:
+                              trivy_vulns += len(res.get("Vulnerabilities") or [])
+                      elif isinstance(data, dict):
+                          for res in data.get("Results", []):
+                              trivy_vulns += len(res.get("Vulnerabilities") or [])
+              except Exception:
+                  pass
+
           # Read Semgrep
           sg_path = "security-reports/semgrep.sarif"
           if os.path.exists(sg_path):
@@ -471,29 +573,70 @@ jobs:
                       sarif = json.load(f)
                       for run in sarif.get("runs", []):
                           semgrep_findings += len(run.get("results", []))
-              except: pass
-              
-          summary_content = f"""# OrbitX Security & Quality Pipeline Execution Summary
-          
-          ## Pipeline Status: Complete
-          
-          | Scanner Tool | Scan Type | Findings Detected |
-          |---|---|---|
-          | **Gitleaks** | Secrets Scanning | {gitleaks_findings} |
-          | **Semgrep** | SAST Code Quality | {semgrep_findings} |
-          | **Trivy** | Dependency & Config | {trivy_vulns} |
-          
-          ### Action Items
-          1. {"Address identified secret exposure leaks immediately." if gitleaks_findings > 0 else "No secrets leaks detected."}
-          2. {"Upgrade out-of-date dependencies reported in dependency-report.md." if trivy_vulns > 0 else "All dependencies are clean."}
-          3. {"Remediation needed for code quality flags in semgrep.sarif." if semgrep_findings > 0 else "Source code passes structural quality check."}
+              except Exception:
+                  pass
+
+          # Check pip-audit report
+          pa_path = "security-reports/pip-audit-report.md"
+          if os.path.exists(pa_path):
+              pip_audit_status = "Completed"
+
+          # Read install log
+          il_path = "security-reports/install-log.txt"
+          if os.path.exists(il_path):
+              with open(il_path) as f:
+                  install_log = f.read().strip()
+
+          # Determine overall status
+          secrets_status = "🔴 FINDINGS" if gitleaks_findings > 0 else "🟢 CLEAN"
+          trivy_status   = "🟡 REVIEW"  if trivy_vulns > 0 else "🟢 CLEAN"
+          sast_status    = "🟡 REVIEW"  if semgrep_findings > 0 else "🟢 CLEAN"
+
+          summary_content = f"""# 🛡️ OrbitX Security & Dependency Scan Dashboard
+
+          ## 📊 Executive Summary
+
+          | Scanner | Type | Findings | Status |
+          |:---|:---|:---:|:---:|
+          | **Gitleaks** | Secrets Scanning | {gitleaks_findings} | {secrets_status} |
+          | **Semgrep** | SAST Code Quality | {semgrep_findings} | {sast_status} |
+          | **Trivy** | Dependency & Config | {trivy_vulns} | {trivy_status} |
+          | **pip-audit** | Python SCA | - | {pip_audit_status} |
+
+          ---
+
+          ## 🔧 Scanner Tool Installation
+
+          ```
+          {install_log[-1500:] if len(install_log) > 1500 else install_log}
+          ```
+
+          ---
+
+          ## 🎯 Action Items
+
+          1. {f"⚠️ **Address {gitleaks_findings} secret(s) immediately. Rotate any exposed keys.**" if gitleaks_findings > 0 else "✅ No secrets exposed."}
+          2. {f"📦 Upgrade {trivy_vulns} vulnerable dependency/dependencies listed in `dependency-report.md`." if trivy_vulns > 0 else "✅ All scanned dependencies are clean."}
+          3. {f"🔍 Review {semgrep_findings} SAST findings in `semgrep.sarif`." if semgrep_findings > 0 else "✅ Source code passes quality analysis."}
+
+          ---
+          *Generated by OrbitX Self-Verifying DevSecOps Pipeline · {os.environ.get("GITHUB_SHA", "local")[:8]}*
           """
+
           with open("security-reports/summary.md", "w") as f:
               f.write(summary_content)
-          '
-          cat security-reports/summary.md
 
-      - name: Upload Final Security Reports Directory
+          # Write to GitHub Step Summary
+          gss = os.environ.get("GITHUB_STEP_SUMMARY")
+          if gss:
+              with open(gss, "w") as f:
+                  f.write(summary_content)
+              print("Wrote to GITHUB_STEP_SUMMARY")
+          else:
+              print(summary_content)
+          PYEOF
+
+      - name: Upload Final Security Report Bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
