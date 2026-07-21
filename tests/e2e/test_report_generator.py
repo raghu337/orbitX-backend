@@ -1,6 +1,7 @@
 import os
+
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 # 100 Test Cases Data Definition
@@ -926,16 +927,16 @@ def generate_report(output_path="test_report.xlsx"):
     wb = Workbook()
     ws = wb.active
     ws.title = "E2E Test Report"
-    
+
     # Enable grid lines visibility
     ws.views.sheetView[0].showGridLines = True
-    
+
     # Header Styles
     header_fill = PatternFill(start_color="1A2639", end_color="1A2639", fill_type="solid")
     header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
     center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    
+
     # Borders
     thin_border = Border(
         left=Side(style='thin', color='DDDDDD'),
@@ -943,14 +944,14 @@ def generate_report(output_path="test_report.xlsx"):
         top=Side(style='thin', color='DDDDDD'),
         bottom=Side(style='thin', color='DDDDDD')
     )
-    
+
     headers = [
-        "Test ID", "Category", "Test Case Name", "Description", 
+        "Test ID", "Category", "Test Case Name", "Description",
         "Verification Steps", "Expected Result", "Appium Status", "Selenium Status"
     ]
-    
+
     ws.append(headers)
-    
+
     # Style Header Row
     for col_idx in range(1, len(headers) + 1):
         cell = ws.cell(row=1, column=col_idx)
@@ -958,45 +959,45 @@ def generate_report(output_path="test_report.xlsx"):
         cell.font = header_font
         cell.alignment = center_align
         cell.border = thin_border
-    
+
     ws.row_dimensions[1].height = 28
-    
+
     # Row striping and status coloring fills
     stripe_fill = PatternFill(start_color="F7F9FB", end_color="F7F9FB", fill_type="solid")
     white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    
+
     pass_fill = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
     pass_font = Font(name="Segoe UI", size=10, bold=True, color="155724")
-    
+
     fail_fill = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
     fail_font = Font(name="Segoe UI", size=10, bold=True, color="721C24")
-    
+
     normal_font = Font(name="Segoe UI", size=10, color="333333")
     id_font = Font(name="Segoe UI", size=10, bold=True, color="555555")
-    
+
     for row_idx, tc in enumerate(TEST_CASES, start=2):
         row_data = [
             tc["id"], tc["category"], tc["name"], tc["description"],
             tc["steps"], tc["expected"], tc["appium"], tc["selenium"]
         ]
         ws.append(row_data)
-        
+
         # Determine background fill for the row (striping)
         row_fill = stripe_fill if row_idx % 2 == 0 else white_fill
-        
+
         # Apply styling to each cell in the row
         for col_idx in range(1, len(row_data) + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.font = id_font if col_idx == 1 else normal_font
             cell.fill = row_fill
             cell.border = thin_border
-            
+
             # Align columns
             if col_idx in [1, 7, 8]:
                 cell.alignment = center_align
             else:
                 cell.alignment = left_align
-            
+
             # Highlight Pass/Fail for Appium (Col 7) and Selenium (Col 8)
             if col_idx == 7: # Appium Status
                 if tc["appium"] == "Pass":
@@ -1012,14 +1013,14 @@ def generate_report(output_path="test_report.xlsx"):
                 elif tc["selenium"] == "Fail":
                     cell.fill = fail_fill
                     cell.font = fail_font
-                    
+
         ws.row_dimensions[row_idx].height = 42
-        
+
     # Auto-adjust columns width
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
-        
+
         for cell in col:
             # Handle multi-line strings by splitting on newlines
             val_str = str(cell.value or '')
@@ -1027,10 +1028,10 @@ def generate_report(output_path="test_report.xlsx"):
             for line in lines:
                 if len(line) > max_len:
                     max_len = len(line)
-                    
+
         # Apply padding
         ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
+
     # Custom adjustments for long columns to look extremely polished
     ws.column_dimensions['A'].width = 11  # Test ID
     ws.column_dimensions['B'].width = 25  # Category
@@ -1040,7 +1041,7 @@ def generate_report(output_path="test_report.xlsx"):
     ws.column_dimensions['F'].width = 45  # Expected Result
     ws.column_dimensions['G'].width = 15  # Appium Status
     ws.column_dimensions['H'].width = 15  # Selenium Status
-    
+
     # Save output
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     wb.save(output_path)

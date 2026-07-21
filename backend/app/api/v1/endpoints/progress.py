@@ -1,9 +1,11 @@
 from typing import Any, List
+
 from fastapi import APIRouter, Depends
-from app.schemas.learning import UserProgressBase, UserProgressUpdate
-from app.models.user import User as UserModel
+
 from app.core import deps
 from app.db.session import get_db
+from app.models.user import User as UserModel
+from app.schemas.learning import UserProgressBase, UserProgressUpdate
 
 router = APIRouter()
 
@@ -15,7 +17,7 @@ def get_user_progress(
 ) -> Any:
     ref = db_conn.reference(f"user_progress/{user_id}")
     progress_data = ref.get() or {}
-    
+
     progress = []
     for c_id, val in progress_data.items():
         cid = int(c_id) if c_id.isdigit() else c_id
@@ -34,7 +36,7 @@ def update_progress(
     current_user: UserModel = Depends(deps.get_current_user),
 ) -> Any:
     ref = db_conn.reference(f"user_progress/{current_user.id}/{progress_in.course_id}")
-    
+
     progress_data = {
         "user_id": current_user.id,
         "course_id": progress_in.course_id,
@@ -42,5 +44,5 @@ def update_progress(
         "score": progress_in.score
     }
     ref.set(progress_data)
-    
+
     return {"message": "Progress updated successfully"}

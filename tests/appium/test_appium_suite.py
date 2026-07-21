@@ -1,6 +1,7 @@
-import pytest
 import os
 import zipfile
+
+import pytest
 
 APK_PATH = "build/app/outputs/flutter-apk/app-debug.apk"
 
@@ -39,14 +40,14 @@ class APKProbe:
     def probe(cls):
         if cls._exists or cls._error is not None:
             return
-        
+
         # Check if the APK file exists
         if not os.path.exists(APK_PATH):
             cls._error = f"Compiled Android App package (APK) not found at {APK_PATH}! Ensure the build-flutter-apk job ran successfully."
             return
-        
+
         cls._exists = True
-        
+
         # Validate APK zip structure
         try:
             with zipfile.ZipFile(APK_PATH, 'r') as apk:
@@ -63,16 +64,16 @@ def test_appium_case(test_id, category, name, description):
     Real, self-verifying Appium test case asserting compile integrity and layout profiles.
     """
     APKProbe.probe()
-    
+
     # Assert APK physically exists and is compiled
     assert APKProbe._error is None, APKProbe._error
     assert APKProbe._exists, f"APK file does not exist at {APK_PATH}"
-    
+
     # Assert zip and dex structure validation to guarantee application build integrity
     assert APKProbe._is_valid_zip, "APK ZIP structure is corrupted"
     assert APKProbe._has_manifest, "APK is missing AndroidManifest.xml"
     assert APKProbe._has_dex, "APK is missing classes.dex bytecode execution files"
-    
+
     # Category checks
     if category == "Splash Screen":
         assert APKProbe._exists

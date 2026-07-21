@@ -1,8 +1,9 @@
 import pytest
-from pages.login_page import LoginPage
 from pages.dashboard_page import DashboardPage
+from pages.login_page import LoginPage
 from pages.logout_page import LogoutPage
 from utils.config import Config
+
 
 @pytest.mark.ui
 @pytest.mark.auth
@@ -12,10 +13,10 @@ class TestOrbitXSession:
     def test_protected_pages_require_authentication(self, driver):
         """Verify navigation directly to dashboard.html redirects to login.html if unauthenticated."""
         logout_page = LogoutPage(driver)
-        
+
         # Navigate directly to protected dashboard page
         logout_page.navigate_to("dashboard.html")
-        
+
         # Verify unauthenticated redirection
         assert logout_page.is_redirected_to_login(), "Direct dashboard access did not redirect unauthenticated session."
 
@@ -31,7 +32,7 @@ class TestOrbitXSession:
 
         # Refresh
         driver.refresh()
-        
+
         # Verify authenticated session persists
         assert dashboard_page.is_logout_button_visible(), "Session lost after page refresh."
         assert dashboard_page.get_profile_name() == "Reddy RaghuVardhan", "Incorrect profile name after refresh."

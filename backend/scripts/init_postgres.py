@@ -1,6 +1,7 @@
 import psycopg2
 from psycopg2 import sql
 
+
 def init_db():
     print("[PostgreSQL] Connecting to default postgres database...")
     try:

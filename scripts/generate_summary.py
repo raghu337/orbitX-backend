@@ -1,7 +1,8 @@
-import os
-import xml.etree.ElementTree as ET
 import json
+import os
 import sys
+import xml.etree.ElementTree as ET
+
 
 def get_xml_results(file_path):
     """
@@ -13,7 +14,7 @@ def get_xml_results(file_path):
     try:
         tree = ET.parse(file_path)
         root = tree.getroot()
-        
+
         # In JUnit, the root element is either <testsuite> or <testsuites>
         if root.tag == 'testsuites':
             total_tests = 0
@@ -37,7 +38,7 @@ def get_xml_results(file_path):
             failed = failures + errors
             passed = total_tests - failed - skipped
             return passed, failed, skipped, total_tests
-            
+
     except Exception as e:
         print(f"[Summary Generator] Error parsing JUnit XML at {file_path}: {e}", file=sys.stderr)
         return 0, 0, 0, 0
@@ -52,11 +53,11 @@ def get_k6_results(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
+
         metrics = data.get("metrics", {})
         checks_passed = 0
         checks_failed = 0
-        
+
         if "checks" in metrics:
             checks_passed = int(metrics["checks"]["values"].get("passes", 0))
             checks_failed = int(metrics["checks"]["values"].get("fails", 0))
@@ -98,27 +99,27 @@ def get_job_duration(job_name):
 def main():
     reports_dir = "reports"
     os.makedirs(reports_dir, exist_ok=True)
-    
+
     # 1. Parse all real reports
     sel_passed, sel_failed, sel_skipped, sel_total = get_xml_results("reports/junit-selenium.xml")
     app_passed, app_failed, app_skipped, app_total = get_xml_results("reports/junit-appium.xml")
     api_passed, api_failed, api_skipped, api_total = get_xml_results("reports/junit-api.xml")
     k6_passed, k6_failed, k6_skipped, k6_total = get_k6_results("reports/k6-summary.json")
-    
+
     # 2. Get durations
     duration_sel = get_job_duration("selenium")
     duration_app = get_job_duration("appium")
     duration_api = get_job_duration("api")
     duration_k6 = get_job_duration("k6")
-    
+
     # 3. Validation - Check expected counts
     expected_selenium = 325
     expected_appium = 320
     expected_api = 310
-    
+
     # Track status of validations
     validation_errors = []
-    
+
     # We enforce test counts MUST match exactly
     if sel_total != expected_selenium:
         validation_errors.append(f"Selenium test count mismatch: Expected {expected_selenium}, Got {sel_total}")
@@ -128,23 +129,23 @@ def main():
         validation_errors.append(f"API test count mismatch: Expected {expected_api}, Got {api_total}")
     if k6_total == 0:
         validation_errors.append("k6 performance metrics are missing or could not be parsed.")
-        
+
     # Calculate rates
     def calc_rate(passed, total):
         return (passed / total * 100) if total > 0 else 0.0
-        
+
     sel_rate = calc_rate(sel_passed, sel_total)
     app_rate = calc_rate(app_passed, app_total)
     api_rate = calc_rate(api_passed, api_total)
     k6_rate = calc_rate(k6_passed, k6_total)
-    
+
     grand_passed = sel_passed + app_passed + api_passed + k6_passed
     grand_failed = sel_failed + app_failed + api_failed + k6_failed
     grand_skipped = sel_skipped + app_skipped + api_skipped + k6_skipped
     grand_total = sel_total + app_total + api_total + k6_total
-    
+
     grand_rate = calc_rate(grand_passed, grand_total)
-    
+
     # Emojis based on status
     def get_status_emoji(passed, total, expected):
         if total == 0 or total != expected:
@@ -157,9 +158,9 @@ def main():
     status_app = get_status_emoji(app_passed, app_total, expected_appium)
     status_api = get_status_emoji(api_passed, api_total, expected_api)
     status_k6 = "🟢 PASS" if (k6_total > 0 and k6_failed == 0) else "🔴 FAIL"
-    
+
     overall_status = "🟢 PASSING" if (not validation_errors and grand_failed == 0 and grand_total > 0) else "🔴 FAILING"
-    
+
     # 4. Generate Dashboard Markdown
     summary_md = f"""# 🚀 OrbitX Comprehensive Verification Dashboard
 
@@ -206,7 +207,7 @@ def main():
     with open("reports/verification-summary.md", "w", encoding="utf-8") as f:
         f.write(summary_md)
     print("Verification summary generated at reports/verification-summary.md")
-    
+
     if "GITHUB_STEP_SUMMARY" in os.environ:
         with open(os.environ["GITHUB_STEP_SUMMARY"], "w", encoding="utf-8") as f:
             f.write(summary_md)

@@ -1,5 +1,6 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class SatelliteRadarPage(BasePage):
     """Encapsulates locators and behaviors for the Satellite Radar component."""
@@ -7,26 +8,26 @@ class SatelliteRadarPage(BasePage):
     # Locators
     MUTE_BUTTON = (By.XPATH, "//button[contains(@class, 'cursor-pointer') and .//*[local-name()='svg']] | //button[@id='mute-radar-btn']")
     DOWNLINK_LATENCY = (By.XPATH, "//*[contains(text(), 'Downlink Latency:')]")
-    
+
     DENSITY_SLIDER = (By.XPATH, "//span[contains(text(), 'Constellation Density')]/parent::div/following-sibling::input")
     DENSITY_VALUE = (By.XPATH, "//span[contains(text(), 'Constellation Density')]/following-sibling::span")
-    
+
     ALTITUDE_SLIDER = (By.XPATH, "//span[contains(text(), 'Orbital Altitude')]/parent::div/following-sibling::input")
     ALTITUDE_VALUE = (By.XPATH, "//span[contains(text(), 'Orbital Altitude')]/following-sibling::span")
-    
+
     CANVAS_MAP = (By.CSS_SELECTOR, "canvas.cursor-crosshair")
-    
+
     # Proximity Defense HUD
     WARNING_LEVEL = (By.XPATH, "//*[contains(text(), 'Warning Level') or contains(text(), 'WARNING LEVEL')]/following-sibling::div")
     DISTANCE_TO_BASE = (By.XPATH, "//*[contains(text(), 'Distance to Base')]/following-sibling::span")
     APPROACH_BEARING = (By.XPATH, "//*[contains(text(), 'Approach bearing')]/following-sibling::span")
-    
+
     # Live Vessel Telemetry
     NORAD_IDENT = (By.XPATH, "//*[contains(text(), 'NORAD Ident')]/following-sibling::span")
     VELOCITY_VECTOR = (By.XPATH, "//*[contains(text(), 'Velocity vector')]/following-sibling::span")
     ORBITAL_ALTITUDE = (By.XPATH, "//*[contains(text(), 'Orbital altitude')]/following-sibling::span")
     CLASSIFICATION = (By.XPATH, "//*[contains(text(), 'Classification')]/following-sibling::span")
-    
+
     # Fleet Table
     FLEET_ROWS = (By.XPATH, "//h3[contains(text(), 'Fleet')]/../descendant::tbody/tr")
 

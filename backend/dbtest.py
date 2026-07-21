@@ -1,5 +1,6 @@
-import psycopg2
 import sys
+
+import psycopg2
 
 # Correct PostgreSQL connection
 url = "postgresql://postgres:8897@localhost:5432/orbitx"

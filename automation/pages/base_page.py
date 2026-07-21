@@ -1,11 +1,12 @@
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from utils.config import Config
 from utils.logger import get_logger
 
+
 class BasePage:
     """Base POM Page class providing common element find/type/click methods."""
-    
+
     def __init__(self, driver):
         self.driver = driver
         self.base_url = Config.BASE_URL.rstrip('/')
@@ -60,7 +61,7 @@ class BasePage:
         self.driver.execute_script(
             "arguments[0].value = arguments[1]; "
             "arguments[0].dispatchEvent(new Event('change', { bubbles: true })); "
-            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", 
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
             element, value
         )
 

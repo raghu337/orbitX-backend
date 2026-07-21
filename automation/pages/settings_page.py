@@ -1,5 +1,6 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class SettingsPage(BasePage):
     """Encapsulates system configuration options in Settings panel."""
@@ -8,18 +9,18 @@ class SettingsPage(BasePage):
     TELEMETRY_TOGGLE = (By.XPATH, "//h4[contains(text(), 'Real-Time Satellite Feed')]/parent::div/following-sibling::button")
     LATENCY_SLIDER = (By.XPATH, "//label[contains(text(), 'Latency Threshold')]/following-sibling::div/input")
     LATENCY_VALUE = (By.XPATH, "//label[contains(text(), 'Latency Threshold')]/following-sibling::div/span")
-    
+
     COGNITIVE_MODEL_PRO = (By.XPATH, "//button[contains(text(), 'Pro')]")
     COGNITIVE_MODEL_FLASH = (By.XPATH, "//button[contains(text(), 'Flash')]")
     COGNITIVE_MODEL_HYBRID = (By.XPATH, "//button[contains(text(), 'Hybrid-AI')]")
-    
+
     CONFIDENCE_SLIDER = (By.XPATH, "//label[contains(text(), 'Confidence Filter')]/parent::div/following-sibling::input")
     CONFIDENCE_VALUE = (By.XPATH, "//label[contains(text(), 'Confidence Filter')]/following-sibling::span")
-    
+
     THEME_COSMIC_DARK = (By.XPATH, "//button[contains(text(), 'Cosmic Dark')]")
     THEME_DEEP_AURORA = (By.XPATH, "//button[contains(text(), 'Deep Aurora')]")
     THEME_SOLAR_ECLIPSE = (By.XPATH, "//button[contains(text(), 'Solar Eclipse')]")
-    
+
     DIAGNOSTICS_ROWS = (By.CSS_SELECTOR, "div.font-mono div")
 
     def toggle_telemetry(self):

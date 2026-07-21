@@ -1,5 +1,6 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class SpaceChatPage(BasePage):
     """Encapsulates telemetry-guided AI chat interaction methods."""
@@ -7,13 +8,13 @@ class SpaceChatPage(BasePage):
     # Locators
     CHAT_INPUT = (By.CSS_SELECTOR, "form input[placeholder*='Ask OrbitX AI']")
     SEND_BUTTON = (By.CSS_SELECTOR, "form button[type='submit']")
-    
+
     SUGGESTED_PROMPTS = (By.XPATH, "//button[.//span[contains(text(), 'Suggested Prompt')]]")
-    
+
     MESSAGE_ROWS = (By.CSS_SELECTOR, "div.space-y-4 div.flex.gap-3")
     USER_MESSAGES = (By.XPATH, "//div[contains(@class, 'flex-row-reverse')]/div/div[contains(@class, 'bg-cyber-cyan')]")
     AI_MESSAGES = (By.XPATH, "//div[not(contains(@class, 'flex-row-reverse')) and contains(@class, 'gap-3')]/div/div[contains(@class, 'bg-white')]")
-    
+
     TYPING_INDICATOR = (By.CSS_SELECTOR, "div.animate-pulse")
 
     def send_message(self, message):

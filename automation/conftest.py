@@ -1,14 +1,15 @@
-import os
+import datetime
 import http.server
+import os
 import socketserver
 import threading
-import datetime
+
 import pytest
 from utils.config import Config
-from utils.logger import get_logger
 from utils.driver_factory import DriverFactory
-from utils.screenshot import ScreenshotUtility
 from utils.excel_report import ExcelReporter
+from utils.logger import get_logger
+from utils.screenshot import ScreenshotUtility
 
 # Define directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,11 +72,11 @@ def driver(request):
     """Fixture that initializes Chrome WebDriver and handles teardown."""
     logger.info("Initializing WebDriver session...")
     driver = DriverFactory.get_driver()
-    
+
     # Cache environment details dynamically
     env_details_cache["browser"] = driver.name.upper()
     env_details_cache["browser_version"] = driver.capabilities.get("browserVersion", "Headless")
-    
+
     # Store driver on the requesting node for access in pytest hooks
     if request.node:
         request.node.funcargs['driver'] = driver
@@ -89,7 +90,7 @@ def pytest_runtest_makereport(item, call):
     """Hook to capture screenshots on failure and collect test execution stats."""
     outcome = yield
     report = outcome.get_result()
-    
+
     # Process when call finishes, or if it was skipped in setup phase
     if report.when == "call" or (report.when == "setup" and report.skipped):
         duration = round(report.duration, 2)
@@ -97,27 +98,27 @@ def pytest_runtest_makereport(item, call):
         module_name = item.module.__name__.split('.')[-1]
         description = item.obj.__doc__ or "No description provided"
         expected = "Success / Passes Validation"
-        
+
         status = "Pass"
         if report.failed:
             status = "Fail"
         elif report.skipped:
             status = "Skipped"
-            
+
         actual = "Verification Passed"
         failure_reason = ""
         stack_trace = ""
         screenshot_path = ""
-        
+
         driver = item.funcargs.get("driver")
-        
+
         if report.failed:
             stack_trace = str(report.longrepr)
             failure_reason = str(call.excinfo.value) if call.excinfo else "AssertionError or Timeout"
             actual = failure_reason
             if driver:
                 screenshot_path = ScreenshotUtility.capture(driver, test_name)
-        
+
         # Save metrics to our reporting array
         test_results_data.append({
             "name": test_name,
@@ -145,18 +146,18 @@ def pytest_sessionfinish(session, exitstatus):
     end_time = datetime.datetime.now()
     duration_secs = (end_time - session_start_time).total_seconds() if session_start_time else 0
     logger.info(f"Test Session Completed. Total duration: {duration_secs:.2f}s")
-    
+
     # Collect system environment metadata
     import platform
-    import sys
+
     import selenium
-    
+
     env_details_cache["os"] = platform.system()
     env_details_cache["python_version"] = platform.python_version()
     env_details_cache["selenium_version"] = selenium.__version__
     env_details_cache["start_time"] = session_start_time.strftime("%H:%M:%S") if session_start_time else ""
     env_details_cache["end_time"] = end_time.strftime("%H:%M:%S")
     env_details_cache["total_duration"] = f"{duration_secs:.2f}s"
-    
+
     # Generate the Excel and Markdown reports
     ExcelReporter.generate_reports(test_results_data, env_details_cache, REPORTS_DIR)

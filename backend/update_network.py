@@ -1,6 +1,7 @@
-import socket
 import os
 import re
+import socket
+
 
 def get_local_ip():
     try:
@@ -24,27 +25,27 @@ def get_local_ip():
 def update_config():
     ip = get_local_ip()
     print(f"[update_network.py] Detected Active Local IP: {ip}")
-    
+
     # Locate config file relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     api_file_path = os.path.abspath(os.path.join(script_dir, '..', 'src', 'services', 'api', 'orbitxApi.js'))
-    
+
     if not os.path.exists(api_file_path):
         print(f"[update_network.py] Error: config file not found at {api_file_path}")
         return False
-        
+
     try:
         with open(api_file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            
+
         pattern = r"(?:export\s+)?const MACHINE_IP\s*=\s*'[^']*';"
         replacement = f"export const MACHINE_IP = '{ip}';"
-        
+
         updated_content = re.sub(pattern, replacement, content)
-        
+
         with open(api_file_path, 'w', encoding='utf-8') as f:
             f.write(updated_content)
-            
+
         print(f"[update_network.py] Success: Overwrote MACHINE_IP with '{ip}' in orbitxApi.js")
         return True
     except Exception as e:

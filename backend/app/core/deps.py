@@ -1,7 +1,9 @@
 from typing import Any
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError, jwt
+
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
@@ -23,12 +25,12 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    
+
     ref = db.reference(f"users/{user_id}")
     user_data = ref.get()
     if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
     return User(
         id=user_data.get("id"),
         name=user_data.get("name"),

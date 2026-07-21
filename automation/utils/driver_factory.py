@@ -1,20 +1,22 @@
 import os
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
+
 class DriverFactory:
     """Factory to spin up configured webdriver instances."""
-    
+
     @staticmethod
     def get_driver():
         """Configure and return a headless WebDriver session (Chrome, Firefox, or Edge)."""
         browser_name = os.environ.get("BROWSER", "chrome").lower()
-        
+
         if browser_name == "firefox":
             firefox_options = webdriver.FirefoxOptions()
             firefox_options.add_argument("--headless")
@@ -27,7 +29,7 @@ class DriverFactory:
                 service = FirefoxService(GeckoDriverManager().install())
                 driver = webdriver.Firefox(service=service, options=firefox_options)
             return driver
-            
+
         elif browser_name == "edge":
             edge_options = webdriver.EdgeOptions()
             edge_options.add_argument("--headless")
@@ -42,7 +44,7 @@ class DriverFactory:
                 service = EdgeService(EdgeChromiumDriverManager().install())
                 driver = webdriver.Edge(service=service, options=edge_options)
             return driver
-            
+
         else:  # Default to chrome
             chrome_options = webdriver.ChromeOptions()
             chrome_options.add_argument("--headless=new")

@@ -1,13 +1,14 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class DashboardPage(BasePage):
     """Encapsulates dashboard page actions."""
-    
+
     PROFILE_NAME = (By.ID, "profile-name")
     CONTENT_TITLE = (By.ID, "content-title")
     LOGOUT_BUTTON = (By.ID, "logout-btn")
-    
+
     def get_profile_name(self):
         """Extract the profile name string displayed in user card."""
         return self.get_text(self.PROFILE_NAME)

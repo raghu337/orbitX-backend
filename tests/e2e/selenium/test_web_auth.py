@@ -1,7 +1,9 @@
 import unittest
+
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
 
 class TestOrbitXWebAuth(unittest.TestCase):
     """
@@ -14,12 +16,12 @@ class TestOrbitXWebAuth(unittest.TestCase):
         options.add_argument("--headless")  # Run headless for CI integration
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
-        
+
         # Note: Local WebDriver configuration required
         try:
             self.driver = webdriver.Chrome(options=options)
             self.driver.implicitly_wait(5)
-        except Exception as e:
+        except Exception:
             print("[Selenium SETUP WARNING]: ChromeDriver not found on local path. Running in simulation mode.")
             self.driver = None
 
@@ -34,7 +36,7 @@ class TestOrbitXWebAuth(unittest.TestCase):
 
         # Navigate to Expo web server running port
         self.driver.get("http://localhost:8081/login")
-        
+
         # Assert input fields display
         email_el = self.driver.find_element(By.CSS_SELECTOR, "input[type='email']")
         pass_el = self.driver.find_element(By.CSS_SELECTOR, "input[type='password']")
@@ -50,13 +52,13 @@ class TestOrbitXWebAuth(unittest.TestCase):
             self.skipTest("No ChromeDriver environment active.")
 
         self.driver.get("http://localhost:8081/login")
-        
+
         email_el = self.driver.find_element(By.CSS_SELECTOR, "input[type='email']")
         btn_el = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        
+
         email_el.send_keys("invalid_email")
         btn_el.click()
-        
+
         error_box = self.driver.find_element(By.CLASS_NAME, "validation-error-box")
         self.assertIn("Please include an '@' in the email address", error_box.text)
 

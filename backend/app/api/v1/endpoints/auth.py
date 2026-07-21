@@ -1,18 +1,17 @@
 import time
 from datetime import datetime, timedelta
 from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
-
-from app.schemas.user import User, UserCreate
-from app.schemas.token import Token
-from app.models.user import User as UserModel
-from app.core import deps
-from app.core import security
+from app.core import deps, security
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.user import User as UserModel
+from app.schemas.token import Token
+from app.schemas.user import User, UserCreate
 
 router = APIRouter()
 
@@ -33,7 +32,7 @@ async def login_access_token(
     start_time = time.time()
     client_ip = request.client.host if request.client else "unknown"
     print(f"\n{'='*55}")
-    print(f"[Auth] LOGIN REQUEST")
+    print("[Auth] LOGIN REQUEST")
     print(f"[Auth]   Email : {form_data.username}")
     print(f"[Auth]   IP    : {client_ip}")
     print(f"{'='*55}")
@@ -113,7 +112,7 @@ async def login_access_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Token generation failed. Please try again.",
         )
-    print(f"[Auth] Step 3 OK: Token generated")
+    print("[Auth] Step 3 OK: Token generated")
 
     # Step 4: Return response
     elapsed = round((time.time() - start_time) * 1000)
@@ -283,13 +282,13 @@ async def forgot_password(
 
     # Simulate sending password reset email
     print(f"[Auth] SUCCESS: User found. Sending password reset email to {email}...")
-    print(f"===========================================================")
-    print(f"SMTP OUTGOING MAIL:")
+    print("===========================================================")
+    print("SMTP OUTGOING MAIL:")
     print(f"  To: {email}")
-    print(f"  From: support@orbitx.com")
-    print(f"  Subject: OrbitX - Password Reset Notification")
-    print(f"  Body: Please click the link to reset your password: http://orbitx.com/reset-password")
-    print(f"===========================================================")
+    print("  From: support@orbitx.com")
+    print("  Subject: OrbitX - Password Reset Notification")
+    print("  Body: Please click the link to reset your password: http://orbitx.com/reset-password")
+    print("===========================================================")
 
     return {
         "success": True,

@@ -8,9 +8,8 @@ system prompt. All API key handling stays server-side.
 import logging
 from typing import List, Optional
 
-from groq import AsyncGroq, APIError, APITimeoutError, RateLimitError
-
 from app.core.config import settings
+from groq import APIError, APITimeoutError, AsyncGroq, RateLimitError
 
 logger = logging.getLogger("orbitx.groq")
 

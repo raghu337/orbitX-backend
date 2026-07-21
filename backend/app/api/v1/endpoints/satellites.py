@@ -112,7 +112,7 @@ def read_satellites(
 ) -> Any:
     ref = db_conn.reference("satellites")
     satellites_data = ref.get()
-    
+
     # Auto-seed if database node is empty
     if not satellites_data:
         ref.set(DEFAULT_SATELLITES)
@@ -121,11 +121,11 @@ def read_satellites(
     satellites = []
     for s_id, val in satellites_data.items():
         sid = int(s_id) if s_id.isdigit() else s_id
-        
+
         launch_date_val = val.get("launch_date")
         if isinstance(launch_date_val, str):
             launch_date_val = datetime.fromisoformat(launch_date_val)
-            
+
         satellites.append(Satellite(
             id=sid,
             name=val.get("name"),
@@ -144,17 +144,17 @@ def read_satellite_by_id(
 ) -> Any:
     ref = db_conn.reference(f"satellites/{id}")
     sat_data = ref.get()
-    
+
     if not sat_data:
         if str(id) in DEFAULT_SATELLITES:
             sat_data = DEFAULT_SATELLITES[str(id)]
         else:
             raise HTTPException(status_code=404, detail="Satellite not found")
-            
+
     launch_date_val = sat_data.get("launch_date")
     if isinstance(launch_date_val, str):
         launch_date_val = datetime.fromisoformat(launch_date_val)
-        
+
     return Satellite(
         id=id,
         name=sat_data.get("name"),
@@ -173,21 +173,21 @@ def favorite_satellite(
 ) -> Any:
     ref = db_conn.reference(f"satellites/{satellite_id}")
     sat_data = ref.get()
-    
+
     if not sat_data:
         if str(satellite_id) in DEFAULT_SATELLITES:
             sat_data = DEFAULT_SATELLITES[str(satellite_id)]
         else:
             raise HTTPException(status_code=404, detail="Satellite not found")
-            
+
     # Save favorite relation in Firebase Realtime Database
     fav_ref = db_conn.reference(f"favorites/{current_user.id}/{satellite_id}")
     fav_ref.set(True)
-    
+
     launch_date_val = sat_data.get("launch_date")
     if isinstance(launch_date_val, str):
         launch_date_val = datetime.fromisoformat(launch_date_val)
-        
+
     return Satellite(
         id=satellite_id,
         name=sat_data.get("name"),
@@ -203,7 +203,7 @@ async def get_tle_for_satellite(id: int) -> Any:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(f"https://celestrak.com/NORAD/elements/gp.php?CATNR={id}")
         if response.status_code == 200:
-            lines = [l.strip() for l in response.text.split("\n") if l.strip()]
+            lines = [line.strip() for line in response.text.split("\n") if line.strip()]
             if len(lines) >= 3:
                 return {"tle1": lines[1], "tle2": lines[2]}
     except httpx.HTTPError:
@@ -214,15 +214,15 @@ async def get_tle_for_satellite(id: int) -> Any:
 def get_satellite_telemetry(id: int, db_conn: Any = Depends(get_db)) -> Any:
     ref = db_conn.reference(f"satellite_tracking/{id}")
     tracking_data = ref.get() or {}
-    
+
     tracking_list = []
     for t_id, val in tracking_data.items():
         tid = int(t_id) if t_id.isdigit() else t_id
-        
+
         timestamp_val = val.get("timestamp")
         if isinstance(timestamp_val, str):
             timestamp_val = datetime.fromisoformat(timestamp_val)
-            
+
         tracking_list.append(SatelliteTracking(
             id=tid,
             satellite_id=id,
@@ -238,13 +238,13 @@ def get_satellite_telemetry(id: int, db_conn: Any = Depends(get_db)) -> Any:
 def post_telemetry(id: int, payload: SatelliteTracking = Body(...), db_conn: Any = Depends(get_db)):
     ref = db_conn.reference(f"satellite_tracking/{id}")
     tracking_id = int(time.time() * 1000)
-    
+
     timestamp_val = payload.timestamp or datetime.utcnow()
     if isinstance(timestamp_val, datetime):
         timestamp_str = timestamp_val.isoformat()
     else:
         timestamp_str = timestamp_val
-        
+
     record = {
         "id": tracking_id,
         "satellite_id": id,
@@ -254,9 +254,9 @@ def post_telemetry(id: int, payload: SatelliteTracking = Body(...), db_conn: Any
         "timestamp": timestamp_str
     }
     ref.child(str(tracking_id)).set(record)
-    
+
     parsed_timestamp = datetime.fromisoformat(timestamp_str) if isinstance(timestamp_str, str) else timestamp_str
-    
+
     return SatelliteTracking(
         id=tracking_id,
         satellite_id=id,

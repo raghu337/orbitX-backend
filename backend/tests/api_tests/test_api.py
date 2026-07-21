@@ -1,8 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app.core.deps import get_current_user
-from app.models.user import User
 from app.main import app
+from app.models.user import User
+
 
 # Fixture to override current user authentication
 @pytest.fixture(autouse=True)

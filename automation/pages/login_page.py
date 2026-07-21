@@ -1,18 +1,19 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class LoginPage(BasePage):
     """Encapsulates locators and user behaviors for the login screen."""
-    
+
     # Locators
     USERNAME_INPUT = (By.ID, "username")
     PASSWORD_INPUT = (By.ID, "password")
     LOGIN_BUTTON = (By.ID, "login-btn")
-    
+
     USERNAME_ERROR = (By.ID, "username-error")
     PASSWORD_ERROR = (By.ID, "password-error")
     GENERAL_ERROR = (By.ID, "general-error")
-    
+
     APP_LOGO = (By.ID, "app-logo")
 
     def is_login_page_loaded(self):

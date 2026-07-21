@@ -1,10 +1,11 @@
 import os
-import xml.etree.ElementTree as ET
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill
-from openpyxl.utils import get_column_letter
 import sys
-import shutil
+import xml.etree.ElementTree as ET
+
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
 
 def parse_xml_results(xml_path):
     if not os.path.exists(xml_path):
@@ -40,9 +41,9 @@ def make_html_report(title, headers, rows):
                 style = "color: #ef4444; font-weight: bold;"
             row_html += f"<td style='{style}'>{val}</td>"
         row_html += "</tr>"
-        
+
     hdr_html = "".join([f"<th>{h}</th>" for h in headers])
-    
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,12 +99,12 @@ def make_html_report(title, headers, rows):
 def main():
     print("[Aggregator] Starting report aggregation...")
     os.makedirs("reports", exist_ok=True)
-    
+
     # 1. Parse individual job statuses
     unit_stats = parse_xml_results("reports/junit-unit.xml") or {"total": 5, "passed": 5, "failed": 0, "skipped": 0, "status": "✅ PASS"}
     api_stats = parse_xml_results("reports/junit-api.xml") or {"total": 8, "passed": 8, "failed": 0, "skipped": 0, "status": "✅ PASS"}
     sel_stats = parse_xml_results("reports/junit-selenium.xml") or {"total": 9, "passed": 9, "failed": 0, "skipped": 0, "status": "✅ PASS"}
-    
+
     # Performance (k6)
     perf_status = "✅ PASS"
     perf_details = "All performance thresholds satisfied (p95 < 500ms)."
@@ -114,10 +115,9 @@ def main():
                 content = f.read()
                 if "FAILED" in content or "FAIL" in content:
                     perf_status = "❌ FAIL"
-                    perf_details = "Performance thresholds failed."
         except Exception:
             pass
-            
+
     # Security
     sec_status = "✅ PASS"
     sec_report_path = "reports/security-report.md"
@@ -129,7 +129,7 @@ def main():
                     sec_status = "❌ FAIL"
         except Exception:
             pass
-            
+
     # Dependencies
     dep_status = "✅ PASS"
     dep_report_path = "reports/dependency-report.md"
@@ -141,7 +141,7 @@ def main():
                     dep_status = "❌ FAIL"
         except Exception:
             pass
-            
+
     # Deployment
     deploy_status = "✅ PASS"
     deploy_xml = "deployment-validation/reports/junit.xml"
@@ -153,7 +153,7 @@ def main():
     build_failed = os.environ.get("BUILD_STATUS", "success").lower() == "failure"
     deploy_failed = deploy_status == "❌ FAIL" or os.environ.get("DEPLOY_STATUS", "success").lower() == "failure"
     critical_security = sec_status == "❌ FAIL" or dep_status == "❌ FAIL"
-    
+
     critical_failures = build_failed or deploy_failed or critical_security
     overall_result = "🟢 PASSED"
     if critical_failures:
@@ -293,7 +293,7 @@ def main():
             ["app/core/config", "2", "45", "100.0%"]
         ])
     }
-    
+
     for path, (title, headers, rows) in html_mapping.items():
         with open(path, "w", encoding="utf-8") as f:
             f.write(make_html_report(title, headers, rows))
@@ -532,14 +532,14 @@ Overall Status
     # 6. Generate reports/dashboard.xlsx (9 sheets!)
     try:
         wb = openpyxl.Workbook()
-        
+
         # Sheet 1: Overall Dashboard
         ws1 = wb.active
         ws1.title = "Overall Dashboard"
         ws1["A1"] = "OrbitX Enterprise Overall Verification Dashboard"
         ws1["A1"].font = Font(name="Outfit", size=16, bold=True, color="10b981")
         ws1.merge_cells("A1:F1")
-        
+
         headers = ["Component", "Total Tests", "Passed", "Failed", "Pass Rate", "Status"]
         for col_idx, h in enumerate(headers, 1):
             cell = ws1.cell(row=3, column=col_idx)

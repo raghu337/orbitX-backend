@@ -1,6 +1,7 @@
 import enum
 from datetime import datetime
 
+
 class UserRole(str, enum.Enum):
     USER = "user"
     ADMIN = "admin"

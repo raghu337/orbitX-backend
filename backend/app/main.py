@@ -1,12 +1,11 @@
 from datetime import datetime
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.services.groq_service as groq_service
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.db.session import check_db_connection
-import app.services.groq_service as groq_service
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -107,13 +106,13 @@ async def forgot_password_root(request: Request):
         )
 
     print(f"[Auth Root] SUCCESS: User found. Sending password reset email to {email}...")
-    print(f"===========================================================")
-    print(f"SMTP OUTGOING MAIL (Root Handler):")
+    print("===========================================================")
+    print("SMTP OUTGOING MAIL (Root Handler):")
     print(f"  To: {email}")
-    print(f"  From: support@orbitx.com")
-    print(f"  Subject: OrbitX - Password Reset Notification")
-    print(f"  Body: Please click the link to reset your password: http://orbitx.com/reset-password")
-    print(f"===========================================================")
+    print("  From: support@orbitx.com")
+    print("  Subject: OrbitX - Password Reset Notification")
+    print("  Body: Please click the link to reset your password: http://orbitx.com/reset-password")
+    print("===========================================================")
 
     return {
         "success": True,

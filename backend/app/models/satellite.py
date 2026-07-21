@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 class Satellite:
     def __init__(self, id=None, name=None, norad_id=None, country=None, launch_date=None, orbit_type=None):
         self.id = id

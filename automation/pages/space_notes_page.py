@@ -1,5 +1,6 @@
-from selenium.webdriver.common.by import By
 from pages.base_page import BasePage
+from selenium.webdriver.common.by import By
+
 
 class SpaceNotesPage(BasePage):
     """Encapsulates locators and behaviors for the Space Notes AI component."""
@@ -7,35 +8,35 @@ class SpaceNotesPage(BasePage):
     # Locators
     SEARCH_INPUT = (By.CSS_SELECTOR, "input[placeholder*='Give notes about']")
     GENERATE_BUTTON = (By.CSS_SELECTOR, "form button[type='submit']")
-    
+
     TAB_SHORT_NOTES = (By.XPATH, "//button[contains(text(), 'Short Notes')]")
     TAB_DETAILED_ANALYSIS = (By.XPATH, "//button[contains(text(), 'Detailed Analysis')]")
     TAB_PDF_SUMMARY = (By.XPATH, "//button[contains(text(), 'PDF Summary')]")
     TAB_STUDY_FLASHCARDS = (By.XPATH, "//button[contains(text(), 'Study Flashcards')]")
-    
+
     TOPIC_TITLE = (By.XPATH, "//h3[contains(text(), 'Topic:')]")
     PRINT_BUTTON = (By.XPATH, "//button[contains(text(), 'Print')]")
-    
+
     # Highlights / Short Notes
     HIGHLIGHTS_LIST = (By.CSS_SELECTOR, "ul li p")
     STATS_LABELS = (By.CSS_SELECTOR, "div.text-slate-400")
     STATS_VALUES = (By.CSS_SELECTOR, "div.text-2xl.font-black")
-    
+
     # Detailed Analysis
     DETAILED_TITLE = (By.CSS_SELECTOR, "h4.text-lg.font-black")
     DETAILED_TEXT = (By.CSS_SELECTOR, "p.text-slate-300")
-    
+
     # PDF Summary
     PDF_HEADER = (By.XPATH, "//h2[contains(text(), 'ORBITX AEROSPACE ACADEMY')]")
     PDF_REF_ID = (By.XPATH, "//*[contains(text(), 'DOCUMENT REF ID:')]")
     PDF_TABLE_ROWS = (By.CSS_SELECTOR, "table tbody tr")
-    
+
     # Study Flashcards
     FLASHCARD_CONTAINER = (By.CSS_SELECTOR, ".perspective-1000")
     FLASHCARD_QUESTION = (By.CSS_SELECTOR, ".perspective-1000 p")
     FLASHCARD_REVEAL_PROMPT = (By.XPATH, "//*[contains(text(), 'Click Card to Reveal')]")
     FLASHCARD_VERIFIED_ANSWER = (By.XPATH, "//*[contains(text(), 'Verified Answer')]/../following-sibling::p | //*[contains(text(), 'Verified Answer')]/following-sibling::p")
-    
+
     # Navigation arrows
     # The first w-12 button is left (prev), the second is right (next)
     PREV_CARD_BUTTON = (By.XPATH, "(//button[contains(@class, 'w-12') and contains(@class, 'h-12')])[1]")
@@ -72,8 +73,8 @@ class SpaceNotesPage(BasePage):
         labels = self.driver.find_elements(*self.STATS_LABELS)
         values = self.driver.find_elements(*self.STATS_VALUES)
         stats_dict = {}
-        for l, v in zip(labels, values):
-            stats_dict[l.text.strip()] = v.text.strip()
+        for label, v in zip(labels, values):
+            stats_dict[label.text.strip()] = v.text.strip()
         return stats_dict
 
     def is_pdf_header_visible(self):

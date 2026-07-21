@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 from unittest.mock import MagicMock
 
 # Set mock env variables before importing anything from the app
@@ -14,21 +14,21 @@ sys.modules['firebase_admin'] = MagicMock()
 sys.modules['firebase_admin.credentials'] = MagicMock()
 sys.modules['firebase_admin.db'] = MagicMock()
 
-import pytest
-from fastapi.testclient import TestClient
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
 
 @pytest.fixture(scope="session")
 def client():
     # Lazy import of app after mocks are in place
-    from app.main import app
-    
     # Mock check_db_connection to return True
     from app.db import session
+    from app.main import app
     session.check_db_connection = MagicMock(return_value=True)
-    
+
     # Mock db references
     mock_db = MagicMock()
     session.db = mock_db
-    
+
     with TestClient(app) as test_client:
         yield test_client

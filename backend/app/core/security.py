@@ -1,8 +1,10 @@
 import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Union
+
 from jose import jwt
 from passlib.context import CryptContext
+
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -32,7 +34,7 @@ def get_password_hash(password: str) -> str:
 async def async_verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Async wrapper for bcrypt password verification.
-    
+
     CRITICAL: bcrypt is CPU-intensive and BLOCKS the event loop if called directly
     inside an async function. This wrapper runs it in a thread executor so the
     event loop remains free to process other requests and send responses.

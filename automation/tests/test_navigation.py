@@ -1,8 +1,9 @@
 import pytest
-from pages.login_page import LoginPage
 from pages.dashboard_page import DashboardPage
+from pages.login_page import LoginPage
 from pages.navigation_page import NavigationPage
 from utils.config import Config
+
 
 @pytest.mark.ui
 class TestOrbitXNavigation:

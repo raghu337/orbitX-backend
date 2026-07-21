@@ -1,9 +1,11 @@
 from typing import Any, List
+
 from fastapi import APIRouter, Depends, HTTPException
-from app.schemas.learning import Course
-from app.models.user import User as UserModel
+
 from app.core import deps
 from app.db.session import get_db
+from app.models.user import User as UserModel
+from app.schemas.learning import Course
 
 router = APIRouter()
 
@@ -36,7 +38,7 @@ def read_courses(
 ) -> Any:
     ref = db_conn.reference("courses")
     courses_data = ref.get()
-    
+
     # Auto-seed if database node is empty
     if not courses_data:
         ref.set(DEFAULT_COURSES)
@@ -63,7 +65,7 @@ def read_course_by_id(
     course_data = ref.get()
     if not course_data:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+
     return Course(
         id=id,
         title=course_data.get("title"),
@@ -81,7 +83,7 @@ def submit_quiz(
 ) -> Any:
     ref = db_conn.reference(f"user_progress/{current_user.id}/{course_id}")
     progress_data = ref.get()
-    
+
     if not progress_data:
         progress_data = {
             "user_id": current_user.id,
@@ -92,6 +94,6 @@ def submit_quiz(
     else:
         progress_data["score"] = max(progress_data.get("score", 0), score)
         progress_data["progress_percentage"] = 100.0
-    
+
     ref.set(progress_data)
     return {"message": "Quiz submitted successfully", "score": score}

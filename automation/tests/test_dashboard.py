@@ -1,6 +1,7 @@
 import pytest
 from pages.login_page import LoginPage
 
+
 @pytest.mark.ui
 class TestOrbitXDashboard:
     """Verifies homepage, logo, and page titles are correctly rendered."""

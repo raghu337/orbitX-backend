@@ -1,6 +1,6 @@
-import pytest
-import time
+
 import httpx
+import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
@@ -42,7 +42,7 @@ class WebProbe:
     def probe(cls):
         if cls._server_up or cls._error is not None:
             return
-        
+
         # Step 1: Check if frontend server is running
         try:
             r = httpx.get(f"{FRONTEND_URL}/index.html", timeout=3.0)
@@ -61,7 +61,7 @@ class WebProbe:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
-            
+
             driver = webdriver.Chrome(options=chrome_options)
             driver.get(f"{FRONTEND_URL}/index.html")
             cls._dom_title = driver.title or ""
@@ -79,19 +79,19 @@ def test_selenium_case(test_id, category, name, description):
     Real, self-verifying Selenium test case checking frontend accessibility and DOM structure.
     """
     WebProbe.probe()
-    
+
     # Assert frontend server is up
     assert WebProbe._server_up, f"Web application failed to open at {FRONTEND_URL}! Error: {WebProbe._error}"
-    
+
     # Assert successful loading of the index document
     if category == "Authentication" or category == "Registration":
         # Check that we can reach index
         assert WebProbe._server_up
-        
+
     elif category == "Performance":
         # Verify frontend load times are clean
         pass
-        
+
     else:
         # General assertions on the web document structure
         assert WebProbe._server_up

@@ -1,6 +1,7 @@
 import os
 import xml.etree.ElementTree as ET
 
+
 def get_coverage_percentage():
     cov_xml = "reports/coverage.xml"
     if not os.path.exists(cov_xml):
@@ -28,7 +29,7 @@ def generate_svg_badge(percentage):
         color = "#fe7d37"  # Orange
     else:
         color = "#e05d44"  # Red
-        
+
     svg_template = f"""<svg xmlns="http://www.w3.org/2000/svg" width="99" height="20">
   <linearGradient id="b" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
