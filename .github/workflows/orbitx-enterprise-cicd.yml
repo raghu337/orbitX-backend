@@ -666,6 +666,7 @@ jobs:
       - name: Compile Summary and Verify Pipeline Output
         run: |
           python scripts/generate_summary.py
+          python scripts/aggregate_reports.py
 
       - name: Upload Final Consolidated Reports
         if: always()

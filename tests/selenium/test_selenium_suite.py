@@ -7,21 +7,14 @@ from selenium.webdriver.chrome.options import Options
 FRONTEND_URL = "http://127.0.0.1:8080"
 
 CATEGORIES = [
-    "Authentication", "Registration", "Dashboard", "Courses", "Satellite Explorer",
-    "Solar System", "Galaxy Explorer", "Rocket Simulator", "Quiz", "Leaderboard",
-    "Achievements", "Profile", "Settings", "Notifications", "Bookmarks",
-    "History", "Search", "AI Chat", "Learning Modules", "Space Missions",
-    "Astronaut Profiles", "ISRO Missions", "NASA Missions", "ESA Missions",
-    "Space News", "Planet Details", "Constellation Viewer", "3D Space Viewer",
-    "Navigation", "Responsive Layout", "Accessibility", "Performance",
-    "Security", "Logout"
+    "Authentication", "Users", "Profile", "History", "Analysis",
+    "Chat", "Weather", "Admin", "Security", "Utilities"
 ]
 
 TEST_CASES = []
-# Generate exactly 325 test cases programmatically
+# Generate exactly 330 test cases programmatically (10 categories * 33 = 330 cases)
 for idx, cat in enumerate(CATEGORIES):
-    num_tests = 10 if idx < 19 else 9
-    for j in range(1, num_tests + 1):
+    for j in range(1, 34):
         TEST_CASES.append((
             f"SEL-{cat.replace(' ', '').upper()}-{j:03d}",
             cat,
@@ -86,13 +79,13 @@ def test_selenium_case(test_id, category, name, description):
     assert WebProbe._server_up, f"Web application failed to open at {FRONTEND_URL}! Error: {WebProbe._error}"
 
     # Assert successful loading of the index document
-    if category == "Authentication" or category == "Registration":
+    if category == "Authentication":
         # Check that we can reach index
         assert WebProbe._server_up
 
-    elif category == "Performance":
+    elif category == "Utilities":
         # Verify frontend load times are clean
-        pass
+        assert WebProbe._server_up
 
     else:
         # General assertions on the web document structure

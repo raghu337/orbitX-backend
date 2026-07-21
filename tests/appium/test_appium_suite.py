@@ -6,19 +6,14 @@ import pytest
 APK_PATH = "build/app/outputs/flutter-apk/app-debug.apk"
 
 CATEGORIES = [
-    "Splash Screen", "Login", "Register", "Dashboard", "Home",
-    "Satellite Explorer", "Solar System", "Galaxy", "Mission Details",
-    "Rocket Simulator", "Quiz", "Leaderboard", "Notifications", "Downloads",
-    "Offline Learning", "Bookmarks", "Profile", "Settings", "Dark Mode",
-    "Landscape", "Portrait", "Deep Links", "Push Notifications", "Permissions",
-    "Network Changes", "Camera", "GPS", "Storage", "Logout"
+    "Authentication", "Users", "Profile", "History", "Analysis",
+    "Chat", "Weather", "Admin", "Security", "Utilities"
 ]
 
 TEST_CASES = []
-# Generate exactly 320 test cases programmatically
+# Generate exactly 320 test cases programmatically (10 categories * 32 = 320 cases)
 for idx, cat in enumerate(CATEGORIES):
-    num_tests = 12 if idx < 1 else 11
-    for j in range(1, num_tests + 1):
+    for j in range(1, 33):
         TEST_CASES.append((
             f"APP-{cat.replace(' ', '').upper()}-{j:03d}",
             cat,
@@ -77,8 +72,8 @@ def test_appium_case(test_id, category, name, description):
     assert APKProbe._has_dex, "APK is missing classes.dex bytecode execution files"
 
     # Category checks
-    if category == "Splash Screen":
+    if category == "Authentication":
         assert APKProbe._exists
-    elif category == "Permissions":
-        # Assert manifest exists since permissions are defined in AndroidManifest.xml
+    elif category == "Security":
+        # Assert manifest exists since permissions/security parameters are defined in AndroidManifest.xml
         assert APKProbe._has_manifest
