@@ -41,7 +41,7 @@ jobs:
       # We use 'continue-on-error: true' to ensure that even if tests fail,
       # the workflow continues to the next step to upload reports.
       run: |
-        pytest automation/tests/test_ui_flows.py --junitxml=automation/reports/junit.xml --html=automation/reports/report.html --self-contained-html
+        pytest automation/tests --junitxml=automation/reports/junit.xml --html=automation/reports/report.html --self-contained-html
       continue-on-error: true
 
     - name: Upload Test Reports and Screenshots Artifacts
