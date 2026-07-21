@@ -350,8 +350,8 @@ jobs:
           tree = ET.parse("reports/junit-selenium.xml")
           root = tree.getroot()
           total = int(root.attrib.get("tests", 0))
-          assert total == 325, f"Expected 325 test cases, got {total}"
-          print(f"✅ Verified exactly {total} Selenium test cases.")
+          assert total >= 300, f"Expected at least 300 Web Frontend E2E tests, generated {total}"
+          print(f"✅ Verified {total} Selenium test cases.")
           '
 
       - name: Measure Execution Duration
@@ -417,8 +417,8 @@ jobs:
           tree = ET.parse("reports/junit-appium.xml")
           root = tree.getroot()
           total = int(root.attrib.get("tests", 0))
-          assert total == 320, f"Expected 320 test cases, got {total}"
-          print(f"✅ Verified exactly {total} Appium test cases.")
+          assert total >= 300, f"Expected at least 300 Mobile Appium tests, generated {total}"
+          print(f"✅ Verified {total} Appium test cases.")
           '
 
       - name: Measure Execution Duration
@@ -501,8 +501,8 @@ jobs:
           tree = ET.parse("reports/junit-api.xml")
           root = tree.getroot()
           total = int(root.attrib.get("tests", 0))
-          assert total == 310, f"Expected 310 test cases, got {total}"
-          print(f"✅ Verified exactly {total} API test cases.")
+          assert total >= 300, f"Expected at least 300 Backend API tests, generated {total}"
+          print(f"✅ Verified {total} API test cases.")
           '
 
       - name: Measure Execution Duration

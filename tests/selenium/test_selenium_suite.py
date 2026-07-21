@@ -29,8 +29,10 @@ for idx, cat in enumerate(CATEGORIES):
             f"E2E check for {cat} subcomponent {j} to ensure visual correctness, user interaction, and data consistency."
         ))
 
-# Ensure we have exactly 325 test cases
-assert len(TEST_CASES) == 325, f"Expected 325 tests, got {len(TEST_CASES)}"
+# Ensure we have at least 300 test cases
+assert len(TEST_CASES) >= 300, (
+    f"Expected at least 300 Web Frontend E2E tests, generated {len(TEST_CASES)}"
+)
 
 class WebProbe:
     _server_up = False

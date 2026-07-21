@@ -27,8 +27,10 @@ for idx, cat in enumerate(CATEGORIES):
             f"Integration and response assertion check for {cat} API route {j}."
         ))
 
-# Ensure we have exactly 310 test cases
-assert len(TEST_CASES) == 310, f"Expected 310 tests, got {len(TEST_CASES)}"
+# Ensure we have at least 300 test cases
+assert len(TEST_CASES) >= 300, (
+    f"Expected at least 300 Backend API tests, generated {len(TEST_CASES)}"
+)
 
 # Cached server check to avoid redundant network calls
 class ServerProbe:

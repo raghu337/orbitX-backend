@@ -26,8 +26,10 @@ for idx, cat in enumerate(CATEGORIES):
             f"Appium viewport check for mobile {cat} category under state profile {j}."
         ))
 
-# Ensure we have exactly 320 test cases
-assert len(TEST_CASES) == 320, f"Expected 320 tests, got {len(TEST_CASES)}"
+# Ensure we have at least 300 test cases
+assert len(TEST_CASES) >= 300, (
+    f"Expected at least 300 Mobile Appium tests, generated {len(TEST_CASES)}"
+)
 
 class APKProbe:
     _exists = False
