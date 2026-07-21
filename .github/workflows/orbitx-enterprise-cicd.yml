@@ -334,7 +334,7 @@ jobs:
           nohup python3 -m http.server 8080 --directory build/web/ > /dev/null 2>&1 &
           sleep 2
 
-      - name: Run Selenium Tests (325 Cases)
+      - name: Run Selenium Tests (330 Cases)
         run: |
           mkdir -p reports
           pytest tests/selenium/ --junitxml=reports/junit-selenium.xml --html=reports/selenium-test-report.html --self-contained-html || echo "Tests completed with failures."
