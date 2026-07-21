@@ -1,51 +1,100 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-OrbitX Enterprise Security Report Aggregator
-Reads raw scanner outputs and produces:
-  - reports/security.json   (structured, consumed by aggregate_reports.py)
-  - reports/security-report.md
+OrbitX Enterprise Security Report Compiler
+=========================================
+Reads findings from Semgrep, CodeQL, Bandit, pip-audit, Safety, Trivy, Gitleaks,
+Dependency Review, and Secret Scan, aggregating them into a unified report.
+Generates:
+  - reports/security.json
+  - reports/security.html
+  - reports/security.md
+  - reports/security-report.md (for backward compatibility)
 """
-import json
+
 import os
 import sys
+import json
+from datetime import datetime
 
+# Force UTF-8 stdout/stderr encoding on Windows
+if sys.platform.startswith("win") and getattr(sys.stdout, "encoding", "").lower() != "utf-8":
+    try:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    except Exception:
+        pass
+
+# Ensure reports directory exists
+os.makedirs("reports", exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Parsers & Helpers
 # ---------------------------------------------------------------------------
-
-def _read_json(path: str) -> dict:
+def read_json(path):
     if not os.path.exists(path):
         return {}
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
-    except Exception as exc:
-        print(f"[Security] ⚠️  Could not parse {path}: {exc}", file=sys.stderr)
+    except Exception as e:
+        print(f"[Security Compiler] Warning: Could not parse JSON at {path}: {e}")
         return {}
 
-
-def _read_text(path: str) -> str:
-    if not os.path.exists(path):
-        return ""
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
-    except Exception:
-        return ""
-
-
-def _sarif_finding_count(path: str) -> int:
-    """Count results in a SARIF file."""
-    data = _read_json(path)
+def sarif_finding_count(path):
+    """Counts results in a SARIF file (used by Semgrep and CodeQL)."""
+    data = read_json(path)
+    if not data:
+        return 0
     count = 0
     for run in data.get("runs", []):
         count += len(run.get("results", []))
     return count
 
+def sarif_severity_counts(path):
+    """Extracts severity details from SARIF."""
+    data = read_json(path)
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    if not data:
+        return counts
+    for run in data.get("runs", []):
+        for result in run.get("results", []):
+            level = result.get("level", "warning").lower()
+            if level == "error":
+                counts["high"] += 1
+            elif level == "warning":
+                counts["medium"] += 1
+            else:
+                counts["low"] += 1
+    return counts
 
-def _trivy_counts(path: str) -> dict:
-    """Return {'critical': n, 'high': n, 'medium': n, 'low': n} from Trivy JSON."""
-    data = _read_json(path)
+def bandit_counts(path):
+    data = read_json(path)
+    counts = {"high": 0, "medium": 0, "low": 0}
+    results = data.get("results", [])
+    for r in results:
+        sev = r.get("issue_severity", "LOW").lower()
+        if sev in counts:
+            counts[sev] += 1
+    return counts
+
+def safety_counts(path):
+    data = read_json(path)
+    if not data:
+        return 0
+    if isinstance(data, list):
+        return len(data)
+    return len(data.get("vulnerabilities", []))
+
+def gitleaks_counts(path):
+    data = read_json(path)
+    if isinstance(data, list):
+        return len(data)
+    return 0
+
+def trivy_counts(path):
+    data = read_json(path)
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     results = data.get("Results", []) or data.get("results", [])
     for r in results:
@@ -55,192 +104,404 @@ def _trivy_counts(path: str) -> dict:
                 counts[sev] += 1
     return counts
 
-
-def _bandit_counts(path: str) -> dict:
-    data = _read_json(path)
-    results = data.get("results", [])
-    counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
-    for item in results:
-        sev = item.get("issue_severity", "LOW").upper()
-        counts[sev] = counts.get(sev, 0) + 1
-    return counts
-
-
-def _safety_counts(path: str) -> int:
-    """Return number of vulnerable packages from Safety JSON."""
-    data = _read_json(path)
-    if isinstance(data, list):
-        return len(data)
-    vulns = data.get("vulnerabilities", [])
-    return len(vulns)
-
-
-def _gitleaks_counts(path: str) -> int:
-    data = _read_json(path)
-    if isinstance(data, list):
-        return len(data)
-    return 0
-
-
-def _zap_counts(path: str) -> dict:
-    """Parse OWASP ZAP JSON report."""
-    data = _read_json(path)
-    counts = {"high": 0, "medium": 0, "low": 0, "info": 0}
-    sites = data.get("site", []) or []
-    for site in sites:
-        for alert in site.get("alerts", []) or []:
-            risk = alert.get("riskdesc", "").split(" ")[0].lower()
-            counts[risk] = counts.get(risk, 0) + 1
-    return counts
-
-
 # ---------------------------------------------------------------------------
-# Status helpers
+# Main Execution
 # ---------------------------------------------------------------------------
+def main():
+    print("[Security Compiler] 🛡️ Starting OrbitX security report compilation...")
+    
+    # ── 1. Gather Scanner Findings ──
+    # Semgrep
+    semgrep_findings = sarif_finding_count("reports/semgrep.sarif")
+    semgrep_sev = sarif_severity_counts("reports/semgrep.sarif")
+    
+    # CodeQL
+    codeql_findings = sarif_finding_count("reports/codeql-results.sarif")
+    codeql_sev = sarif_severity_counts("reports/codeql-results.sarif")
+    
+    # Bandit
+    bandit_data = bandit_counts("reports/bandit-report.json")
+    bandit_findings = sum(bandit_data.values())
+    
+    # pip-audit
+    pip_audit_data = read_json("reports/pip-audit-report.json")
+    pip_audit_findings = len(pip_audit_data.get("dependencies", [])) if isinstance(pip_audit_data, dict) else len(pip_audit_data)
+    
+    # Safety
+    safety_findings = safety_counts("reports/safety-report.json")
+    
+    # Trivy
+    trivy_fs_sev = trivy_counts("reports/trivy-report.json")
+    trivy_docker_sev = trivy_counts("reports/docker-backend-trivy.json")
+    trivy_findings = sum(trivy_fs_sev.values()) + sum(trivy_docker_sev.values())
+    trivy_combined_sev = {
+        "critical": trivy_fs_sev["critical"] + trivy_docker_sev["critical"],
+        "high": trivy_fs_sev["high"] + trivy_docker_sev["high"],
+        "medium": trivy_fs_sev["medium"] + trivy_docker_sev["medium"],
+        "low": trivy_fs_sev["low"] + trivy_docker_sev["low"]
+    }
+    
+    # Gitleaks
+    gitleaks_findings = gitleaks_counts("reports/gitleaks-report.json")
+    
+    # Dependency Review
+    dep_review_data = read_json("reports/dependency-review-report.json")
+    dep_review_findings = len(dep_review_data) if isinstance(dep_review_data, list) else 0
 
-def _status(ok: bool, warn: bool = False) -> str:
-    if ok:
-        return "🟢 PASS"
-    if warn:
-        return "🟡 WARNING"
-    return "🔴 FAIL"
+    # Secret Scan
+    secret_scan_data = read_json("reports/secret-scan-report.json")
+    secret_scan_findings = len(secret_scan_data) if isinstance(secret_scan_data, list) else 0
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def compile_security_reports() -> dict:
-    os.makedirs("reports", exist_ok=True)
-
-    # --- Semgrep ---
-    semgrep_count = _sarif_finding_count("reports/semgrep.sarif")
-    semgrep_ok   = semgrep_count == 0
-    semgrep_warn = 0 < semgrep_count <= 5
-
-    # --- Bandit ---
-    bandit = _bandit_counts("reports/bandit-report.json")
-    bandit_high   = bandit.get("HIGH", 0)
-    bandit_medium = bandit.get("MEDIUM", 0)
-    bandit_ok     = bandit_high == 0
-    bandit_warn   = bandit_high == 0 and bandit_medium > 0
-
-    # --- Safety ---
-    safety_vulns = _safety_counts("reports/safety-report.json")
-    safety_ok    = safety_vulns == 0
-    safety_warn  = False
-
-    # --- OWASP ZAP ---
-    zap = _zap_counts("reports/zap-report.json")
-    zap_high = zap.get("high", 0)
-    zap_ok   = zap_high == 0
-    zap_warn = zap_high == 0 and (zap.get("medium", 0) > 0)
-
-    # --- Trivy FS ---
-    trivy_fs = _trivy_counts("reports/trivy-report.json")
-    trivy_fs_crit = trivy_fs.get("critical", 0)
-    trivy_fs_high = trivy_fs.get("high", 0)
-    trivy_fs_ok   = trivy_fs_crit == 0 and trivy_fs_high == 0
-    trivy_fs_warn = trivy_fs_crit == 0 and trivy_fs_high > 0
-
-    # --- Trivy Docker ---
-    trivy_docker = _trivy_counts("reports/docker-backend-trivy.json")
-    trivy_d_crit = trivy_docker.get("critical", 0)
-    trivy_d_high = trivy_docker.get("high", 0)
-    trivy_d_ok   = trivy_d_crit == 0 and trivy_d_high == 0
-    trivy_d_warn = trivy_d_crit == 0 and trivy_d_high > 0
-
-    # --- Gitleaks ---
-    secrets_count = _gitleaks_counts("reports/gitleaks-report.json")
-    secrets_ok    = secrets_count == 0
-
-    # --- Dependency scan (npm audit) ---
-    npm_data  = _read_json("reports/npm-audit-report.json")
-    npm_vulns = npm_data.get("metadata", {}).get("vulnerabilities", {})
-    npm_high  = npm_vulns.get("high", 0) + npm_vulns.get("critical", 0)
-    dep_ok    = npm_high == 0
-    dep_warn  = not dep_ok and npm_high <= 3
-
-    # --- JWT / Auth Security (inferred from API tests) ---
-    jwt_ok = True  # Assume pass unless API tests failed
-    auth_ok = True
-    authz_ok = True
-
-    # --- CORS / Rate-Limiting / Headers (heuristic from ZAP) ---
-    cors_ok    = zap.get("medium", 0) == 0
-    rate_ok    = True
-    headers_ok = zap.get("low", 0) <= 5
-
-    # Build structured result
+    # ── 2. Build Structured Security Object ──
     scanners = [
-        {"name": "Semgrep SAST",          "category": "SAST",         "findings": semgrep_count,  "status": _status(semgrep_ok,   semgrep_warn)},
-        {"name": "Bandit",                 "category": "SAST",         "findings": bandit_high,    "status": _status(bandit_ok,    bandit_warn)},
-        {"name": "Safety",                 "category": "Dependency",   "findings": safety_vulns,   "status": _status(safety_ok,    safety_warn)},
-        {"name": "OWASP ZAP",             "category": "DAST",         "findings": zap_high,       "status": _status(zap_ok,       zap_warn)},
-        {"name": "Trivy FS",              "category": "SCA",          "findings": trivy_fs_crit,  "status": _status(trivy_fs_ok,  trivy_fs_warn)},
-        {"name": "Secret Scan (Gitleaks)","category": "Secrets",      "findings": secrets_count,  "status": _status(secrets_ok)},
-        {"name": "Dependency Scan (npm)", "category": "Dependency",   "findings": npm_high,       "status": _status(dep_ok,       dep_warn)},
-        {"name": "JWT Security",          "category": "Auth",         "findings": 0,              "status": _status(jwt_ok)},
-        {"name": "Authentication",        "category": "Auth",         "findings": 0,              "status": _status(auth_ok)},
-        {"name": "Authorization",         "category": "Auth",         "findings": 0,              "status": _status(authz_ok)},
-        {"name": "CORS Policy",           "category": "Network",      "findings": 0,              "status": _status(cors_ok)},
-        {"name": "Rate Limiting",         "category": "Network",      "findings": 0,              "status": _status(rate_ok)},
-        {"name": "Security Headers",      "category": "Network",      "findings": zap.get("low", 0), "status": _status(headers_ok, not headers_ok)},
+        {
+            "name": "Semgrep",
+            "category": "SAST",
+            "findings": semgrep_findings,
+            "sev": {"critical": 0, "high": semgrep_sev["high"], "medium": semgrep_sev["medium"], "low": semgrep_sev["low"]},
+            "status": "🟢 PASS" if semgrep_findings == 0 else ("🟡 WARN" if semgrep_findings <= 3 else "🔴 FAIL")
+        },
+        {
+            "name": "CodeQL",
+            "category": "SAST",
+            "findings": codeql_findings,
+            "sev": {"critical": codeql_sev["critical"], "high": codeql_sev["high"], "medium": codeql_sev["medium"], "low": codeql_sev["low"]},
+            "status": "🟢 PASS" if codeql_findings == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Bandit",
+            "category": "SAST",
+            "findings": bandit_findings,
+            "sev": {"critical": 0, "high": bandit_data["high"], "medium": bandit_data["medium"], "low": bandit_data["low"]},
+            "status": "🟢 PASS" if bandit_findings == 0 else ("🟡 WARN" if bandit_data["high"] == 0 else "🔴 FAIL")
+        },
+        {
+            "name": "pip-audit",
+            "category": "SCA",
+            "findings": pip_audit_findings,
+            "sev": {"critical": 0, "high": pip_audit_findings, "medium": 0, "low": 0},
+            "status": "🟢 PASS" if pip_audit_findings == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Safety",
+            "category": "SCA",
+            "findings": safety_findings,
+            "sev": {"critical": 0, "high": safety_findings, "medium": 0, "low": 0},
+            "status": "🟢 PASS" if safety_findings == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Trivy",
+            "category": "SCA",
+            "findings": trivy_findings,
+            "sev": trivy_combined_sev,
+            "status": "🟢 PASS" if trivy_combined_sev["critical"] + trivy_combined_sev["high"] == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Gitleaks",
+            "category": "Secrets",
+            "findings": gitleaks_findings,
+            "sev": {"critical": gitleaks_findings, "high": 0, "medium": 0, "low": 0},
+            "status": "🟢 PASS" if gitleaks_findings == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Dependency Review",
+            "category": "SCA",
+            "findings": dep_review_findings,
+            "sev": {"critical": 0, "high": dep_review_findings, "medium": 0, "low": 0},
+            "status": "🟢 PASS" if dep_review_findings == 0 else "🔴 FAIL"
+        },
+        {
+            "name": "Secret Scan",
+            "category": "Secrets",
+            "findings": secret_scan_findings,
+            "sev": {"critical": secret_scan_findings, "high": 0, "medium": 0, "low": 0},
+            "status": "🟢 PASS" if secret_scan_findings == 0 else "🔴 FAIL"
+        }
     ]
 
-    all_pass    = all(sc["status"].startswith("🟢") for sc in scanners)
-    any_fail    = any(sc["status"].startswith("🔴") for sc in scanners)
-    overall_sec = "🟢 PASS" if all_pass else ("🔴 FAIL" if any_fail else "🟡 WARNING")
-
+    total_findings = sum(s["findings"] for s in scanners)
+    failed_scans = sum(1 for s in scanners if s["status"] == "🔴 FAIL")
+    overall_status = "🟢 PASS" if failed_scans == 0 else "🔴 FAIL"
+    
     score = 100
-    for sc in scanners:
-        if sc["status"].startswith("🔴"):
-            score -= 12
-        elif sc["status"].startswith("🟡"):
+    for s in scanners:
+        if s["status"] == "🔴 FAIL":
+            score -= 10
+        elif s["status"] == "🟡 WARN":
             score -= 4
     score = max(0, score)
 
+    # ── 3. Calculate Severity Totals for Charting ──
+    crit_total = sum(s["sev"].get("critical", 0) for s in scanners)
+    high_total = sum(s["sev"].get("high", 0) for s in scanners)
+    med_total = sum(s["sev"].get("medium", 0) for s in scanners)
+    low_total = sum(s["sev"].get("low", 0) for s in scanners)
+
+    max_sev = max(1, crit_total, high_total, med_total, low_total)
+    crit_height = int((crit_total / max_sev) * 120)
+    high_height = int((high_total / max_sev) * 120)
+    med_height = int((med_total / max_sev) * 120)
+    low_height = int((low_total / max_sev) * 120)
+
+    # Save security.json
     result = {
-        "status":   overall_sec,
-        "score":    score,
+        "status": overall_status,
+        "score": score,
         "scanners": scanners,
         "summary": {
-            "total":   len(scanners),
-            "passed":  sum(1 for s in scanners if s["status"].startswith("🟢")),
+            "total": len(scanners),
+            "passed": sum(1 for s in scanners if s["status"].startswith("🟢")),
             "warning": sum(1 for s in scanners if s["status"].startswith("🟡")),
-            "failed":  sum(1 for s in scanners if s["status"].startswith("🔴")),
-        },
+            "failed": failed_scans,
+            "findings_count": total_findings,
+            "severities": {
+                "critical": crit_total,
+                "high": high_total,
+                "medium": med_total,
+                "low": low_total
+            }
+        }
     }
-
-    # Write JSON
     with open("reports/security.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
-    print("[Security] ✅  reports/security.json written")
 
-    # Write Markdown
-    rows = "\n".join(
-        f"| {sc['name']} | {sc['category']} | {sc['findings']} | {sc['status']} |"
-        for sc in scanners
-    )
-    md = f"""# 🛡️ OrbitX Security Dashboard
+    # ── 4. Generate Markdown reports ──
+    scanner_rows = []
+    for s in scanners:
+        scanner_rows.append(f"| {s['name']} | {s['category']} | {s['findings']} | {s['status']} |")
 
-## Overall Security Status: {overall_sec}
+    sev_rows = []
+    for s in scanners:
+        sev_rows.append(f"| {s['name']} | {s['sev'].get('critical',0)} | {s['sev'].get('high',0)} | {s['sev'].get('medium',0)} | {s['sev'].get('low',0)} |")
 
-**Security Score: {score}/100**
+    # Generate Markdown progress bar/chart helper
+    def md_bar(val):
+        filled = int((val / max_sev) * 20) if max_sev > 0 else 0
+        return "█" * filled + "░" * (20 - filled)
 
-| Scanner | Category | Findings | Status |
-|---------|----------|----------|--------|
-{rows}
+    recommendations = [
+        "- **Upgrade Outdated Packages**: Remediate dependency flaws identified in `pip-audit` and `Safety` audits.",
+        "- **Address SAST Findings**: Fix code vulnerabilities flagged by `Semgrep` and `Bandit` engines.",
+        "- **Audit Secrets**: Use Git Filter-Repo to scrub secrets history if any entries were flagged by `Gitleaks` or `Secret Scan`."
+    ]
+
+    md_content = f"""# 🛡️ OrbitX Enterprise Security Assessment
+
+> **Overall Risk Status: {overall_status}**
+> **Security Grade Score: {score}/100**
+> **Total Vulnerability Findings: {total_findings}**
 
 ---
-*Generated by OrbitX Security Aggregator*
+
+## 📊 Summary Table
+
+| Scanner Engine | Category | Findings | Status |
+| :--- | :--- | :---: | :---: |
+{chr(10).join(scanner_rows)}
+
+---
+
+## 📈 Severity Table
+
+| Scanner Engine | Critical | High | Medium | Low |
+| :--- | :---: | :---: | :---: | :---: |
+{chr(10).join(sev_rows)}
+
+---
+
+## 📊 Vulnerability Severity Distribution Chart
+
+- **Critical**: `[{md_bar(crit_total)}]` ({crit_total})
+- **High**:     `[{md_bar(high_total)}]` ({high_total})
+- **Medium**:   `[{md_bar(med_total)}]` ({med_total})
+- **Low**:      `[{md_bar(low_total)}]` ({low_total})
+
+---
+
+## 💡 Remediation Recommendations
+
+{chr(10).join(recommendations)}
+
+---
+*Generated by OrbitX Enterprise Security Compiler*
 """
+    with open("reports/security.md", "w", encoding="utf-8") as f:
+        f.write(md_content)
     with open("reports/security-report.md", "w", encoding="utf-8") as f:
-        f.write(md)
-    print("[Security] ✅  reports/security-report.md written")
+        f.write(md_content)
 
-    return result
+    # ── 5. Generate HTML Report ──
+    html_scanner_rows = ""
+    for s in scanners:
+        badge_cls = "badge-green" if s["status"].startswith("🟢") else ("badge-yellow" if s["status"].startswith("🟡") else "badge-red")
+        html_scanner_rows += f"""
+        <tr>
+          <td><strong>{s['name']}</strong></td>
+          <td>{s['category']}</td>
+          <td style="color: { 'var(--text)' if s['findings'] == 0 else 'var(--red)' }; font-weight: 600;">{s['findings']}</td>
+          <td><span class="badge {badge_cls}">{s['status']}</span></td>
+        </tr>
+        """
 
+    html_sev_rows = ""
+    for s in scanners:
+        html_sev_rows += f"""
+        <tr>
+          <td><strong>{s['name']}</strong></td>
+          <td>{s['sev'].get('critical', 0)}</td>
+          <td>{s['sev'].get('high', 0)}</td>
+          <td>{s['sev'].get('medium', 0)}</td>
+          <td>{s['sev'].get('low', 0)}</td>
+        </tr>
+        """
+
+    html_recs = ""
+    for rec in recommendations:
+        html_recs += f"<p style='margin-bottom: 12px; font-size: 0.95rem; color: var(--text);'>{rec}</p>"
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Security Assessment Portal | OrbitX</title>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+      <style>
+        :root {{
+          --bg: #070913;
+          --card-bg: rgba(18, 22, 41, 0.7);
+          --card-border: rgba(255, 255, 255, 0.06);
+          --text: #e2e8f0;
+          --muted: #8a99ad;
+          --green: #10b981;
+          --red: #ef4444;
+          --yellow: #f59e0b;
+          --purple: #8b5cf6;
+          --blue: #3b82f6;
+          --cyan: #06b6d4;
+        }}
+        body {{
+          font-family: 'Outfit', sans-serif;
+          background-color: var(--bg);
+          color: var(--text);
+          padding: 40px 24px;
+        }}
+        .wrap {{ max-width: 1000px; margin: 0 auto; }}
+        header {{
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
+          border-radius: 16px;
+          padding: 24px;
+          margin-bottom: 32px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }}
+        h1 {{ font-size: 1.8rem; font-weight: 800; color: #fff; }}
+        .badge {{ padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }}
+        .badge-green {{ background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid var(--green); }}
+        .badge-red {{ background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid var(--red); }}
+        .badge-yellow {{ background: rgba(245, 158, 11, 0.15); color: var(--yellow); border: 1px solid var(--yellow); }}
+        .card {{
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
+          border-radius: 16px;
+          padding: 24px;
+          margin-bottom: 32px;
+        }}
+        h2 {{ font-size: 1.25rem; font-weight: 700; margin-bottom: 18px; color: var(--muted); }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th {{ text-align: left; padding: 12px; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; border-bottom: 1px solid var(--card-border); }}
+        td {{ padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-size: 0.95rem; }}
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <header>
+          <div>
+            <h1>🛡️ OrbitX Security Assessment</h1>
+            <p style="color: var(--muted); margin-top: 4px;">Unified security verification reports portal</p>
+          </div>
+          <div>
+            <span class="badge { 'badge-green' if failed_scans == 0 else 'badge-red' }">{overall_status}</span>
+            <div style="margin-top: 8px; font-size: 1.5rem; font-weight: 800; text-align: right;">{score}/100</div>
+          </div>
+        </header>
+
+        <div class="card">
+          <h2>📊 Vulnerability Severity Distribution</h2>
+          <div style="display: flex; justify-content: space-around; align-items: flex-end; height: 180px; padding: 20px 0; background: rgba(255,255,255,0.01); border-radius: 12px; border: 1px solid var(--card-border); position: relative;">
+            <div style="text-align: center; width: 60px;">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--red); margin-bottom: 6px;">{crit_total}</div>
+              <div style="height: {crit_height}px; width: 36px; background: var(--red); border-radius: 6px; margin: 0 auto; min-height: 4px;"></div>
+              <div style="font-size: 0.75rem; color: var(--muted); margin-top: 8px; font-weight: 600;">Critical</div>
+            </div>
+            <div style="text-align: center; width: 60px;">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--yellow); margin-bottom: 6px;">{high_total}</div>
+              <div style="height: {high_height}px; width: 36px; background: var(--yellow); border-radius: 6px; margin: 0 auto; min-height: 4px;"></div>
+              <div style="font-size: 0.75rem; color: var(--muted); margin-top: 8px; font-weight: 600;">High</div>
+            </div>
+            <div style="text-align: center; width: 60px;">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--blue); margin-bottom: 6px;">{med_total}</div>
+              <div style="height: {med_height}px; width: 36px; background: var(--blue); border-radius: 6px; margin: 0 auto; min-height: 4px;"></div>
+              <div style="font-size: 0.75rem; color: var(--muted); margin-top: 8px; font-weight: 600;">Medium</div>
+            </div>
+            <div style="text-align: center; width: 60px;">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">{low_total}</div>
+              <div style="height: {low_height}px; width: 36px; background: var(--cyan); border-radius: 6px; margin: 0 auto; min-height: 4px;"></div>
+              <div style="font-size: 0.75rem; color: var(--muted); margin-top: 8px; font-weight: 600;">Low</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>📊 Scanner Status Summary</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Scanner Engine</th>
+                <th>Category</th>
+                <th>Findings</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {html_scanner_rows}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>📈 Vulnerability Severity Matrix</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Scanner Engine</th>
+                <th>Critical</th>
+                <th>High</th>
+                <th>Medium</th>
+                <th>Low</th>
+              </tr>
+            </thead>
+            <tbody>
+              {html_sev_rows}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>💡 Remediation Recommendations</h2>
+          {html_recs}
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    with open("reports/security.html", "w", encoding="utf-8") as f:
+        f.write(html_body)
+
+    print("[Security Compiler] ✅ Security compilation complete!")
+    sys.exit(0)
 
 if __name__ == "__main__":
-    compile_security_reports()
+    main()

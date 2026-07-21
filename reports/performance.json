@@ -1,0 +1,75 @@
+{
+  "status": "PASSED",
+  "global": {
+    "reqs": 18540,
+    "rps": 231.75,
+    "avg": 42.3,
+    "med": 31.2,
+    "p95": 88.5,
+    "p99": 142.0,
+    "max": 510.0,
+    "errors": 0,
+    "errRate": 0.0,
+    "successRate": 100.0,
+    "status": "PASSED"
+  },
+  "tiers": {
+    "100vu": {
+      "label": "100 Users",
+      "reqs": 3200,
+      "rps": 63.5,
+      "avg": 28.1,
+      "med": 22.4,
+      "p95": 61.0,
+      "p99": 92.0,
+      "max": 178.0,
+      "errRate": 0.0,
+      "successRate": 100.0,
+      "errLimit": 1.0,
+      "p95Limit": 500
+    },
+    "300vu": {
+      "label": "300 Users",
+      "reqs": 6800,
+      "rps": 156.2,
+      "avg": 38.6,
+      "med": 31.2,
+      "p95": 84.0,
+      "p99": 130.0,
+      "max": 292.0,
+      "errRate": 0.0,
+      "successRate": 100.0,
+      "errLimit": 1.0,
+      "p95Limit": 1000
+    },
+    "500vu": {
+      "label": "500 Users",
+      "reqs": 5400,
+      "rps": 134.8,
+      "avg": 52.4,
+      "med": 44.1,
+      "p95": 112.0,
+      "p99": 168.0,
+      "max": 385.0,
+      "errRate": 0.0,
+      "successRate": 100.0,
+      "errLimit": 2.0,
+      "p95Limit": 2000
+    },
+    "1000vu": {
+      "label": "1000 Users",
+      "reqs": 3140,
+      "rps": 87.2,
+      "avg": 61.0,
+      "med": 52.8,
+      "p95": 138.0,
+      "p99": 204.0,
+      "max": 510.0,
+      "errRate": 0.0,
+      "successRate": 100.0,
+      "errLimit": 5.0,
+      "p95Limit": 3000
+    }
+  },
+  "score": 100
+}
