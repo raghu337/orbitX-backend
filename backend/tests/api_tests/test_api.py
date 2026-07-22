@@ -1,14 +1,13 @@
 from unittest.mock import MagicMock, patch
-
 import pytest
 from app.core.deps import get_current_user
+from app.db.session import get_db
 from app.main import app
 from app.models.user import User
 
-
-# Fixture to override current user authentication
+# Fixture to override current user authentication and database dependency
 @pytest.fixture(autouse=True)
-def override_auth():
+def override_deps():
     mock_user = User(
         id="mock_user_id",
         name="Reddy RaghuVardhan",
@@ -17,89 +16,89 @@ def override_auth():
         role="astronaut",
         created_at="2026-07-20T12:00:00"
     )
+    
+    mock_db = MagicMock()
+    
+    def mock_ref_factory(path):
+        m = MagicMock()
+        if path in ("courses", "learning/courses"):
+            m.get.return_value = {
+                "1": {
+                    "id": 1,
+                    "title": "Orbital Testing Course",
+                    "description": "Learn to test orbital paths",
+                    "difficulty_level": "Beginner"
+                }
+            }
+        elif path.startswith("courses/") or path.startswith("learning/courses/"):
+            m.get.return_value = {
+                "id": 1,
+                "title": "Orbital Testing Course",
+                "description": "Learn to test orbital paths",
+                "difficulty_level": "Beginner"
+            }
+        elif path in ("satellites", "satellites/"):
+            m.get.return_value = {
+                "25544": {
+                    "id": 25544,
+                    "name": "ISS (ZARYA)",
+                    "norad_id": 25544,
+                    "country": "US/RUSSIA",
+                    "launch_date": "1998-11-20T00:00:00",
+                    "orbit_type": "LEO"
+                }
+            }
+        elif path.startswith("satellites/"):
+            m.get.return_value = {
+                "id": 25544,
+                "name": "ISS (ZARYA)",
+                "norad_id": 25544,
+                "country": "US/RUSSIA",
+                "launch_date": "1998-11-20T00:00:00",
+                "orbit_type": "LEO"
+            }
+        else:
+            m.get.return_value = None
+        return m
+
+    mock_db.reference.side_effect = mock_ref_factory
+
     app.dependency_overrides[get_current_user] = lambda: mock_user
-    yield
+    app.dependency_overrides[get_db] = lambda: mock_db
+    yield mock_db
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
-@patch("app.db.session.get_db")
-def test_read_courses(mock_get_db, client):
+def test_read_courses(client):
     """Test retrieving course catalog with database mock."""
-    mock_ref = MagicMock()
-    mock_ref.get.return_value = {
-        "1": {
-            "title": "Orbital Testing Course",
-            "description": "Learn to test orbital paths",
-            "difficulty_level": "Beginner"
-        }
-    }
-    mock_get_db.return_value.reference.return_value = mock_ref
-
     response = client.get("/api/v1/learning/courses")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["title"] == "Orbital Testing Course"
 
-@patch("app.db.session.get_db")
-def test_read_course_by_id_success(mock_get_db, client):
+def test_read_course_by_id_success(client):
     """Test retrieving single course by ID."""
-    mock_ref = MagicMock()
-    mock_ref.get.return_value = {
-        "title": "Orbital Testing Course",
-        "description": "Learn to test orbital paths",
-        "difficulty_level": "Beginner"
-    }
-    mock_get_db.return_value.reference.return_value = mock_ref
-
     response = client.get("/api/v1/learning/courses/1")
     assert response.status_code == 200
     assert response.json()["title"] == "Orbital Testing Course"
 
-@patch("app.db.session.get_db")
-def test_submit_quiz(mock_get_db, client):
+def test_submit_quiz(client):
     """Test quiz submission endpoint."""
-    mock_ref = MagicMock()
-    mock_ref.get.return_value = None
-    mock_get_db.return_value.reference.return_value = mock_ref
-
     response = client.post("/api/v1/learning/quiz/submit?course_id=1&score=95")
     assert response.status_code == 200
     assert response.json() == {"message": "Quiz submitted successfully", "score": 95}
 
-@patch("app.db.session.get_db")
-def test_read_satellites(mock_get_db, client):
+def test_read_satellites(client):
     """Test retrieving satellite list."""
-    mock_ref = MagicMock()
-    mock_ref.get.return_value = {
-        "25544": {
-            "name": "ISS (ZARYA)",
-            "norad_id": 25544,
-            "country": "US/RUSSIA",
-            "launch_date": "1998-11-20T00:00:00",
-            "orbit_type": "LEO"
-        }
-    }
-    mock_get_db.return_value.reference.return_value = mock_ref
-
     response = client.get("/api/v1/satellites/")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["name"] == "ISS (ZARYA)"
 
-@patch("app.db.session.get_db")
-def test_favorite_satellite(mock_get_db, client):
+def test_favorite_satellite(client):
     """Test adding satellite to user favorites."""
-    mock_ref = MagicMock()
-    mock_ref.get.return_value = {
-        "name": "ISS (ZARYA)",
-        "norad_id": 25544,
-        "country": "US/RUSSIA",
-        "launch_date": "1998-11-20T00:00:00",
-        "orbit_type": "LEO"
-    }
-    mock_get_db.return_value.reference.return_value = mock_ref
-
     response = client.post("/api/v1/satellites/favorite?satellite_id=25544")
     assert response.status_code == 200
     assert response.json()["name"] == "ISS (ZARYA)"
