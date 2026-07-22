@@ -203,6 +203,26 @@ export default function SpaceNotesAI({ prefilledTopic, onTopicProcessed }) {
   // Flashcards state
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+
+  // Health check to verify FastAPI backend connection
+  useEffect(() => {
+    const checkServerHealth = async () => {
+      try {
+        const resp = await fetch('http://localhost:8000/health');
+        if (resp.ok) {
+          setIsOnline(true);
+        } else {
+          setIsOnline(false);
+        }
+      } catch {
+        setIsOnline(false);
+      }
+    };
+    checkServerHealth();
+    const timer = setInterval(checkServerHealth, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Smart-Search Fetcher prioritizing AI API
   const generateNotes = async (query) => {
@@ -351,9 +371,13 @@ export default function SpaceNotesAI({ prefilledTopic, onTopicProcessed }) {
             Educational Synthesis Hub
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-[#101726]/80 px-3 py-1.5 rounded-lg border border-border-cyan/50 text-[10px] font-bold text-cyber-cyan/80 tracking-widest uppercase">
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-bold tracking-widest uppercase transition-all duration-300 ${
+          isOnline
+            ? 'bg-cyber-cyan/10 border-cyber-cyan/40 text-cyber-cyan shadow-[0_0_12px_rgba(0,229,255,0.2)] animate-pulse'
+            : 'bg-[#101726]/80 border-border-cyan/50 text-cyber-cyan/80'
+        }`}>
           <Terminal className="w-3.5 h-3.5" />
-          Offline AI Node Active
+          {isOnline ? 'AI Telemetry Online (Connected)' : 'Offline AI Node Active'}
         </div>
       </div>
 
