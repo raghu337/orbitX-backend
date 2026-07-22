@@ -10,7 +10,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:frontend": "playwright test --config=playwright.config.ts",
+    "test:mobile": "wdio run mobile/wdio.conf.js",
+    "test:backend": "pytest backend/tests",
+    "test:k6": "k6 run performance/k6/k6.config.js",
+    "test:coverage": "pytest --cov=backend/app --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml",
+    "test:all": "bash scripts/run_qa_pipeline.sh"
   },
   "dependencies": {
     "@expo-google-fonts/orbitron": "^0.4.2",
@@ -68,13 +74,19 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@appium/types": "^0.35.0",
     "@babel/plugin-transform-private-methods": "^7.29.7",
     "@babel/plugin-transform-private-property-in-object": "^7.29.7",
+    "@playwright/test": "^1.45.0",
+    "@types/node": "^20.14.9",
     "@types/react": "~19.1.0",
+    "appium": "^2.11.0",
     "babel-preset-expo": "~54.0.10",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.2",
+    "webdriverio": "^8.39.0"
   },
   "private": true
 }

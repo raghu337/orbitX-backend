@@ -1,0 +1,30 @@
+[run]
+branch = True
+source =
+    backend/app
+    src
+omit =
+    */tests/*
+    */__init__.py
+    */alembic/*
+    */node_modules/*
+    */venv/*
+
+[report]
+show_missing = True
+precision = 2
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self\.debug
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    raise
+
+[html]
+directory = coverage/html
+
+[xml]
+output = coverage/coverage.xml

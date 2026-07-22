@@ -25,20 +25,54 @@ line_length = 100
 multi_line_output = 3
 
 [tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra -q --tb=short"
-pythonpath = ["backend"]
+minversion = "7.0"
+addopts = "-ra -q --tb=short --cov=backend/app --cov-report=term-missing --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --junitxml=reports/junit.xml"
+pythonpath = ["backend", "."]
 testpaths = [
     "backend/tests",
-    "automation/tests",
-    "deployment-validation/tests"
+    "frontend/tests",
+    "mobile/tests",
+    "automation/tests"
 ]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 markers = [
     "ui: UI automation tests",
     "auth: Authentication tests",
     "smoke: Smoke deployment checks",
-    "api: API endpoint tests"
+    "api: API endpoint tests",
+    "unit: Backend unit tests",
+    "integration: API integration tests",
+    "mobile: Mobile E2E Appium tests",
+    "performance: k6 performance benchmark markers",
+    "e2e: End to end functional test cases"
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["backend/app"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*/migrations/*",
+    "*/alembic/*",
+    "*/venv/*"
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80.0
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "pass"
+]
+
+[tool.coverage.html]
+directory = "coverage/html"
+
