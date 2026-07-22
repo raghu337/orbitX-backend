@@ -3,6 +3,9 @@
   "main": "expo/AppEntry.js",
   "version": "1.0.0",
   "scripts": {
+    "dev": "expo start --web",
+    "dev:web": "npm --prefix orbitx-web run dev",
+    "dev:expo": "expo start",
     "start": "expo start",
     "start:lan": "expo start --lan",
     "start:clean": "expo start -c",

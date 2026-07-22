@@ -29,9 +29,6 @@ jobs:
         with:
           chrome-version: stable
 
-      - name: Setup ChromeDriver
-        uses: browser-actions/setup-chromedriver@v1
-
       - name: Install Xvfb and Display Dependencies
         run: |
           sudo apt-get update
@@ -41,6 +38,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r automation/requirements.txt
+
+      - name: Pre-flight Verification - Python, Chrome & Selenium Manager
+        run: |
+          echo "=== 1. Python Environment Check ==="
+          python --version
+          
+          echo -e "\n=== 2. Google Chrome Installation Check ==="
+          which google-chrome || which chrome
+          google-chrome --version || chrome --version
+          
+          echo -e "\n=== 3. Selenium Manager & Headless Driver Verification ==="
+          python -c "
+          from selenium import webdriver
+          opts = webdriver.ChromeOptions()
+          opts.add_argument('--headless=new')
+          opts.add_argument('--no-sandbox')
+          opts.add_argument('--disable-dev-shm-usage')
+          driver = webdriver.Chrome(options=opts)
+          print('✅ Selenium Manager initialized WebDriver successfully!')
+          print('   Browser Name:', driver.name)
+          print('   Browser Version:', driver.capabilities.get('browserVersion'))
+          driver.quit()
+          "
 
       - name: Start FastAPI Backend Service
         env:
@@ -123,13 +143,14 @@ jobs:
           echo "| Telemetry Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           echo "| **Workflow Name** | Selenium E2E Automation CI |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Backend Health Endpoint** | `http://127.0.0.1:8000/health` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Frontend Target URL** | `http://127.0.0.1:8080` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Browser Driver** | Google Chrome Headless (Xvfb Virtual Display :99) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Test Suites Executed** | `automation/tests` & `tests/selenium` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend Health Endpoint** | \`http://127.0.0.1:8000/health\` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend Target URL** | \`http://127.0.0.1:8080\` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Driver Strategy** | Native Selenium Manager (Automated ChromeDriver Resolution) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser Environment** | Google Chrome Stable (Xvfb Virtual Display :99) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Test Suites Executed** | \`automation/tests\` & \`tests/selenium\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f automation/reports/junit.xml ]; then
-            echo "✅ **Test Reports & Failures Screenshots compiled into workflow artifacts.**" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Test Reports & Failure Screenshots compiled into workflow artifacts.**" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ **JUnit report was not generated.**" >> $GITHUB_STEP_SUMMARY
           fi
