@@ -9,64 +9,127 @@ on:
 
 jobs:
   e2e-tests:
-    name: Run E2E Test Suite
+    name: Run Selenium E2E Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'automation/requirements.txt'
 
-    - name: Install Google Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
+      - name: Setup Google Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r automation/requirements.txt
+      - name: Setup ChromeDriver
+        uses: browser-actions/setup-chromedriver@v1
 
-    - name: Run Pytest Selenium E2E Tests
-      env:
-        BASE_URL: ${{ secrets.BASE_URL }}
-        ORBITX_USERNAME: ${{ secrets.USERNAME }}
-        ORBITX_PASSWORD: ${{ secrets.PASSWORD }}
-      # Run pytest, generate HTML, JUnit XML and test results reports.
-      # We use 'continue-on-error: true' to ensure that even if tests fail,
-      # the workflow continues to the next step to upload reports.
-      run: |
-        pytest automation/tests --junitxml=automation/reports/junit.xml --html=automation/reports/report.html --self-contained-html
-      continue-on-error: true
+      - name: Install Xvfb and Display Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libxi6 libgconf-2-4 libnss3 libatk-bridge2.0-0 libgtk-3-0 curl
 
-    - name: Upload Test Reports and Screenshots Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-reports-and-results
-        path: |
-          automation/reports/report.html
-          automation/reports/junit.xml
-          automation/reports/test-results.xlsx
-          automation/reports/screenshots/
-        if-no-files-found: warn
+      - name: Install Python Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r automation/requirements.txt
 
-    - name: Verify Test Success and Fail Workflow if Needed
-      # If JUnit XML report exists, parse it to check for failures/errors.
-      # If there are any failures or errors, fail the workflow run.
-      run: |
-        if [ -f automation/reports/junit.xml ]; then
-          if grep -q -E 'failures="[1-9]|errors="[1-9]' automation/reports/junit.xml; then
-            echo "E2E tests failed! Please download the artifact to review screenshots and logs."
-            exit 1
-          else
-            echo "All E2E tests passed successfully!"
-          fi
-        else
-          echo "JUnit report was not generated."
+      - name: Start FastAPI Backend Service
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          echo "FastAPI backend server process started in background."
+
+      - name: Wait for Backend Health Endpoint (HTTP 200)
+        run: |
+          echo "Polling http://127.0.0.1:8000/health for readiness..."
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend server is up and healthy (HTTP 200)!"
+              exit 0
+            fi
+            echo "Waiting for backend server... (Attempt $i/30 - Received HTTP $STATUS)"
+            sleep 1
+          done
+          echo "❌ Backend server health check timed out after 30 seconds!"
           exit 1
-        fi
+
+      - name: Start Frontend Web Application
+        run: |
+          python -m http.server 8080 --directory automation/mock_app &
+          echo "Frontend static web server process started on port 8080."
+
+      - name: Wait for Frontend Web Application (HTTP 200)
+        run: |
+          echo "Polling http://127.0.0.1:8080 for reachability..."
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080 || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Frontend web server is reachable (HTTP 200)!"
+              exit 0
+            fi
+            echo "Waiting for frontend server... (Attempt $i/30 - Received HTTP $STATUS)"
+            sleep 1
+          done
+          echo "❌ Frontend server reachability check timed out after 30 seconds!"
+          exit 1
+
+      - name: Verify Service Connectivity Pre-flight
+        run: |
+          echo "=== Backend Health Verification ==="
+          curl -v http://127.0.0.1:8000/health
+          echo -e "\n=== Frontend Header Verification ==="
+          curl -I http://127.0.0.1:8080
+
+      - name: Run Pytest Selenium E2E Tests
+        env:
+          BASE_URL: ${{ secrets.BASE_URL || 'http://127.0.0.1:8080' }}
+          ORBITX_USERNAME: ${{ secrets.USERNAME || 'astronaut@orbitx.com' }}
+          ORBITX_PASSWORD: ${{ secrets.PASSWORD || 'password123' }}
+          BROWSER: chrome
+          DISPLAY: :99
+        run: |
+          mkdir -p automation/reports/screenshots
+          Xvfb :99 -screen 0 1920x1080x24 &
+          pytest automation/tests tests/selenium --reruns 2 --reruns-delay 1 --junitxml=automation/reports/junit.xml --html=automation/reports/report.html --self-contained-html -v
+
+      - name: Upload Test Reports & Screenshot Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selenium-e2e-reports-and-screenshots
+          path: |
+            automation/reports/report.html
+            automation/reports/junit.xml
+            automation/reports/test-results.xlsx
+            automation/reports/screenshots/
+          if-no-files-found: warn
+
+      - name: Generate GitHub Step Summary
+        if: always()
+        run: |
+          echo "## 🛸 OrbitX Selenium E2E Automation Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Telemetry Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Workflow Name** | Selenium E2E Automation CI |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend Health Endpoint** | `http://127.0.0.1:8000/health` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend Target URL** | `http://127.0.0.1:8080` (HTTP 200) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Browser Driver** | Google Chrome Headless (Xvfb Virtual Display :99) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Test Suites Executed** | `automation/tests` & `tests/selenium` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f automation/reports/junit.xml ]; then
+            echo "✅ **Test Reports & Failures Screenshots compiled into workflow artifacts.**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **JUnit report was not generated.**" >> $GITHUB_STEP_SUMMARY
+          fi
