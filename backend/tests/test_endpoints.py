@@ -14,7 +14,7 @@ def test_health_endpoint(client):
     """Test the health check endpoint returns status ok."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
 
 @patch("app.services.groq_service.get_chat_response")
 def test_search_space_endpoint(mock_get_chat, client):

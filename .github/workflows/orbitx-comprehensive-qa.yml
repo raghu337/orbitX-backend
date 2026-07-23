@@ -1,0 +1,112 @@
+name: "🧪 OrbitX Comprehensive QA & Excel Reports Pipeline"
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: comprehensive-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  # ==============================================================================
+  # 1. Execute Comprehensive QA Testing Suite (1,600 Test Cases)
+  # ==============================================================================
+  qa-test-execution:
+    name: "🚀 Execute QA Test Suites (1,600 Test Cases)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create Reports Output Directory
+        run: mkdir -p reports
+
+      - name: Run Unit Test Suite (400 Test Cases)
+        run: |
+          pytest tests/unit/test_unit_suite.py -v --junitxml=reports/junit-unit.xml
+
+      - name: Run Load Test Suite (400 Test Cases)
+        run: |
+          pytest tests/load/test_load_suite.py -v --junitxml=reports/junit-load.xml
+
+      - name: Run Vulnerability Test Suite (400 Test Cases)
+        run: |
+          pytest tests/vulnerability/test_vulnerability_suite.py -v --junitxml=reports/junit-vulnerability.xml
+
+      - name: Run Selenium E2E Test Suite (400 Test Cases)
+        run: |
+          pytest tests/selenium/test_selenium_suite.py -v --junitxml=reports/junit-selenium.xml
+
+      - name: Generate Individual & Overall Excel Test Reports
+        run: |
+          python scripts/generate_comprehensive_excel_reports.py
+
+      # ==============================================================================
+      # 2. Upload Individual Excel Test Results Artifacts
+      # ==============================================================================
+      - name: Upload Unit Test Excel Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unit_Test_Results_Excel
+          path: reports/Unit_Test_Results.xlsx
+
+      - name: Upload Load Test Excel Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Load_Test_Results_Excel
+          path: reports/Load_Test_Results.xlsx
+
+      - name: Upload Vulnerability Test Excel Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vulnerability_Test_Results_Excel
+          path: reports/Vulnerability_Test_Results.xlsx
+
+      - name: Upload Selenium E2E Test Excel Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Selenium_E2E_Test_Results_Excel
+          path: reports/Selenium_E2E_Test_Results.xlsx
+
+      # ==============================================================================
+      # 3. Upload Master Overall Summary Excel Artifact
+      # ==============================================================================
+      - name: Upload Overall Master Test Excel Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Overall_Test_Results_Excel
+          path: reports/Overall_Test_Results.xlsx
+
+      - name: Upload Complete QA Reports Bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: All_OrbitX_QA_Excel_Reports
+          path: reports/*.xlsx

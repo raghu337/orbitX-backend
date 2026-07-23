@@ -263,7 +263,7 @@ async def forgot_password(
         user_exists = bool(users_data)
     except Exception as db_err:
         print(f"[Auth] Firebase DB not initialized or query failed: {db_err}")
-        mock_emails = {"astronaut@orbitx.com", "jhuvamma548@gmail.comt", "test@example.com"}
+        mock_emails = {"astronaut@orbitx.com", "astronaut@gmail.com", "jhuvamma548@gmail.com", "test@example.com"}
         if email in mock_emails:
             print(f"[Auth] Fallback: Mock user found for local testing: {email}")
             user_exists = True

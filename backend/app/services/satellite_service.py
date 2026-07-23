@@ -1,11 +1,11 @@
 from datetime import datetime
 
 import requests
-from fastapi import APIRouter
+from app.core.config import settings
 
 router = APIRouter()
 
-N2YO_API_KEY = "YOUR_N2YO_API_KEY"
+N2YO_API_KEY = settings.N2YO_API_KEY or "DEMO_KEY"
 
 SATELLITE_IDS = [
     25544,  # ISS

@@ -15,6 +15,6 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "llama-3.1-8b-instant"
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

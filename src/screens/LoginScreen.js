@@ -19,22 +19,41 @@ import NeonButton from '../components/NeonButton';
 import { COLORS, FONTS, SPACING, SHADOWS } from '../theme/theme';
 import { useAuth } from '../hooks/useAuth';
 import { BACKEND_URL, OFFLINE_MODE } from '../services/api/orbitxApi';
+import { validateEmail, validatePassword, isLoginFormValid } from '../utils/validation';
 
 const LoginScreen = ({ navigation }) => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Compute validation errors in real-time
+  const emailError = (emailTouched || email.length > 0) ? validateEmail(email) : '';
+  const passwordError = (passwordTouched || password.length > 0) ? validatePassword(password) : '';
+  const isFormValid = isLoginFormValid(email, password);
+
+  const handleEmailChange = (text) => {
+    setEmail(text);
+    setEmailTouched(true);
+    setAuthError('');
+  };
+
+  const handlePasswordChange = (text) => {
+    setPassword(text);
+    setPasswordTouched(true);
+    setAuthError('');
+  };
 
   const handleLogin = async () => {
-    setError('');
-    Keyboard.dismiss();
+    if (!isFormValid || loading) return;
 
-    if (!email.trim() || !password) {
-      setError('Please enter both email and password.');
-      return;
-    }
+    setEmailTouched(true);
+    setPasswordTouched(true);
+    setAuthError('');
+    Keyboard.dismiss();
 
     setLoading(true);
     try {
@@ -45,17 +64,17 @@ const LoginScreen = ({ navigation }) => {
       navigation.replace('HomeDashboard');
     } catch (err) {
       setLoading(false);
-      setError(err.userMessage || err.message || 'Login failed');
+      setAuthError(err.userMessage || err.message || 'Invalid email or password.');
     }
   };
 
   const handleForgotPassword = async () => {
-    setError('');
+    setAuthError('');
     Keyboard.dismiss();
 
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setError('Please enter your email address to reset your password.');
+    const emailValError = validateEmail(email);
+    if (emailValError) {
+      setAuthError('Please enter a valid Gmail address to reset your password.');
       return;
     }
 
@@ -71,7 +90,7 @@ const LoginScreen = ({ navigation }) => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email: trimmedEmail }),
+          body: JSON.stringify({ email: email.trim() }),
         });
 
         const data = await response.json();
@@ -87,7 +106,7 @@ const LoginScreen = ({ navigation }) => {
       );
     } catch (err) {
       setLoading(false);
-      setError(err.message || 'Failed to process password reset request.');
+      setAuthError(err.message || 'Failed to process password reset request.');
     }
   };
 
@@ -109,28 +128,32 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             <GlassCard style={styles.card}>
-              {error ? (
+              {authError ? (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText}>{authError}</Text>
                 </View>
               ) : null}
 
               <CustomInput
                 label="Email"
-                placeholder="astronaut@orbitx.com"
+                placeholder="astronaut@gmail.com"
                 value={email}
-                onChangeText={(t) => { setEmail(t); setError(''); }}
+                onChangeText={handleEmailChange}
+                onBlur={() => setEmailTouched(true)}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                error={emailError}
               />
               
               <CustomInput
                 label="Password"
                 placeholder="••••••••"
                 value={password}
-                onChangeText={(t) => { setPassword(t); setError(''); }}
+                onChangeText={handlePasswordChange}
+                onBlur={() => setPasswordTouched(true)}
                 secureTextEntry
+                error={passwordError}
               />
 
               <TouchableOpacity
@@ -141,17 +164,13 @@ const LoginScreen = ({ navigation }) => {
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 
-              {loading ? (
-                <View style={styles.loaderContainer}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                </View>
-              ) : (
-                <NeonButton
-                  title="Enter Orbit"
-                  onPress={handleLogin}
-                  style={styles.button}
-                />
-              )}
+              <NeonButton
+                title="Enter Orbit"
+                onPress={handleLogin}
+                disabled={!isFormValid || loading}
+                loading={loading}
+                style={styles.button}
+              />
 
               <View style={styles.footer}>
                 <Text style={styles.footerText}>New to Space? </Text>

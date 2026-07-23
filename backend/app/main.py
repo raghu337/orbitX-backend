@@ -88,7 +88,7 @@ async def forgot_password_root(request: Request):
         user_exists = bool(users_data)
     except Exception as db_err:
         print(f"[Auth Root] Firebase DB not initialized or query failed: {db_err}")
-        mock_emails = {"astronaut@orbitx.com", "jhuvamma548@gmail.comt", "test@example.com"}
+        mock_emails = {"astronaut@orbitx.com", "astronaut@gmail.com", "jhuvamma548@gmail.com", "test@example.com"}
         if email in mock_emails:
             print(f"[Auth Root] Fallback: Mock user found for local testing: {email}")
             user_exists = True
@@ -119,6 +119,32 @@ async def forgot_password_root(request: Request):
         "message": "A password reset notification has been sent to your registered email address."
     }
 
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws")
+@app.websocket("/ws/telemetry")
+@app.websocket("/api/v1/ws/telemetry")
+async def websocket_telemetry_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        await websocket.send_json({
+            "event": "connected",
+            "system": "OrbitX Telemetry WebSocket",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_json({
+                "event": "telemetry_ping",
+                "received": data,
+                "status": "ONLINE",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
 @app.get("/", tags=["root"])
 async def root() -> dict:
     return {
@@ -129,4 +155,10 @@ async def root() -> dict:
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "system": "OrbitX Backend",
+        "database": "ONLINE",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+

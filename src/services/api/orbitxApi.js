@@ -100,20 +100,20 @@ orbitxApi.interceptors.response.use(
 
     if (error.code === 'ECONNABORTED') {
       // Timeout ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â server took too long
-      console.error(`[API]   Type    : TIMEOUT`);
-      console.error(`[API]   URL     : ${fullUrl}`);
-      console.error(`[API]   After   : ${timeoutMs}ms`);
-      console.error(`[API]   Fix     : Is backend running? Is the ngrok tunnel active?`);
+      console.warn(`[API]   Type    : TIMEOUT`);
+      console.warn(`[API]   URL     : ${fullUrl}`);
+      console.warn(`[API]   After   : ${timeoutMs}ms`);
+      console.warn(`[API]   Fix     : Is backend running? Is the ngrok tunnel active?`);
     } else if (!error.response) {
       // Network error ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â no response received at all
-      console.error(`[API]   Type    : NETWORK ERROR (no response)`);
-      console.error(`[API]   URL     : ${fullUrl}`);
-      console.error(`[API]   Message : ${error.message}`);
-      console.error(`[API]   Code    : ${error.code}`);
-      console.error(`[API]   Fix 1   : Run backend with --host 0.0.0.0`);
-      console.error(`[API]   Fix 2   : Open Windows Firewall port 8000 (run start_backend.ps1 as Admin)`);
-      console.error(`[API]   Fix 3   : Both devices on SAME WiFi network`);
-      console.error(`[API]   Fix 4   : Verify ngrok tunnel URL ${BACKEND_URL} matches your active tunnel`);
+      console.warn(`[API]   Type    : NETWORK ERROR (no response)`);
+      console.warn(`[API]   URL     : ${fullUrl}`);
+      console.warn(`[API]   Message : ${error.message}`);
+      console.warn(`[API]   Code    : ${error.code}`);
+      console.warn(`[API]   Fix 1   : Run backend with --host 0.0.0.0`);
+      console.warn(`[API]   Fix 2   : Open Windows Firewall port 8000 (run start_backend.ps1 as Admin)`);
+      console.warn(`[API]   Fix 3   : Both devices on SAME WiFi network`);
+      console.warn(`[API]   Fix 4   : Verify ngrok tunnel URL ${BACKEND_URL} matches your active tunnel`);
     } else {
       // HTTP error ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â server responded with an error code
       console.warn(`[API]   Type    : HTTP ${status}`);

@@ -1,7 +1,8 @@
 {
   "name": "orbitx",
-  "main": "expo/AppEntry.js",
   "version": "1.0.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
   "scripts": {
     "dev": "expo start --web",
     "dev:web": "npm --prefix orbitx-web run dev",
@@ -10,8 +11,8 @@
     "start:lan": "expo start --lan",
     "start:clean": "expo start -c",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test:frontend": "playwright test --config=playwright.config.ts",
@@ -24,16 +25,21 @@
   "dependencies": {
     "@expo-google-fonts/orbitron": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
+
     "@react-native-async-storage/async-storage": "^2.2.0",
+
+    "@react-navigation/native": "^7.3.5",
+    "@react-navigation/native-stack": "^7.17.7",
     "@react-navigation/bottom-tabs": "^7.18.5",
     "@react-navigation/drawer": "^7.12.4",
     "@react-navigation/elements": "^2.9.27",
-    "@react-navigation/native": "^7.3.5",
-    "@react-navigation/native-stack": "^7.17.7",
-    "@react-three/drei": "^10.7.7",
+
     "@react-three/fiber": "^9.6.1",
+    "@react-three/drei": "^10.7.7",
+
     "axios": "^1.16.1",
-    "expo": "~54.0.35",
+
+    "expo": "~54.0.36",
     "expo-asset": "~12.0.13",
     "expo-av": "~16.0.8",
     "expo-background-fetch": "~14.0.9",
@@ -49,7 +55,7 @@
     "expo-image": "~3.0.11",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
-    "expo-linking": "~8.0.11",
+    "expo-linking": "~8.0.12",
     "expo-location": "~19.0.8",
     "expo-media-library": "~18.2.1",
     "expo-notifications": "~0.32.17",
@@ -59,25 +65,28 @@
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-task-manager": "~14.0.9",
-    "expo-three": "^8.0.0",
-    "expo-web-browser": "~15.0.10",
+    "expo-web-browser": "~15.0.11",
+
     "firebase": "^12.15.0",
+
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+
     "react-native-gesture-handler": "~2.28.0",
     "react-native-maps": "1.20.1",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "^15.12.1",
+    "react-native-svg": "~15.12.1",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1",
+
     "satellite.js": "^4.1.4",
-    "three": "^0.184.0"
+    "three": "^0.166.1"
   },
   "devDependencies": {
-    "@appium/types": "^0.35.0",
+    "@appium/types": "^1.5.1",
     "@babel/plugin-transform-private-methods": "^7.29.7",
     "@babel/plugin-transform-private-property-in-object": "^7.29.7",
     "@playwright/test": "^1.45.0",
@@ -90,6 +99,5 @@
     "ts-node": "^10.9.2",
     "typescript": "~5.9.2",
     "webdriverio": "^8.39.0"
-  },
-  "private": true
+  }
 }
